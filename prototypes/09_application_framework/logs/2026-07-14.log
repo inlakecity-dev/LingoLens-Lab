@@ -43,3 +43,74 @@ Session Started : 2026-07-14 13:01:02
 Session Ended   : 2026-07-14 13:11:48
 Duration        : 0:10:46.256781
 ============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-14 17:13:29
+============================================================
+2026-07-14 17:13:29 | INFO    | [APP] Application Started
+2026-07-14 17:13:45 | INFO    | [LENS] Open Floating Lens selected
+2026-07-14 17:13:48 | INFO    | [LENS] Live Translation Enabled
+2026-07-14 17:13:51 | INFO    | [LENS] Lens Settings selected
+2026-07-14 17:20:05 | INFO    | [LENS] Live Translation Disabled
+2026-07-14 17:20:08 | INFO    | [LENS] Live Translation Enabled
+2026-07-14 17:31:04 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-14 17:31:04
+Duration        : 0:17:34.669569
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-14 17:31:08
+============================================================
+2026-07-14 17:31:08 | INFO    | [APP] Application Started
+2026-07-14 17:37:22 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-14 17:37:22
+Duration        : 0:06:13.343158
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-14 17:37:57
+============================================================
+2026-07-14 17:37:57 | INFO    | [APP] Application Started
+2026-07-14 17:38:03 | INFO    | [FILE] Save Translation selected
+2026-07-14 17:38:05 | INFO    | [FILE] Export History selected
+2026-07-14 17:38:10 | INFO    | [LENS] Live Translation Enabled
+2026-07-14 17:38:12 | INFO    | [LENS] Live Translation Disabled
+2026-07-14 17:38:14 | INFO    | [LENS] Open Floating Lens selected
+2026-07-14 17:38:15 | INFO    | [LENS] Lens Settings selected
+2026-07-14 17:38:19 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-14 17:38:19
+Duration        : 0:00:21.748278
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-14 17:47:04
+============================================================
+2026-07-14 17:47:04 | INFO    | [APP] Application Started
+2026-07-14 19:05:00 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-14 19:05:00
+Duration        : 1:17:55.627499
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-14 19:05:06
+============================================================
+2026-07-14 19:05:06 | INFO    | [APP] Application Started
+2026-07-14 19:05:18 | INFO    | [TRANSLATE] Rectangle selected
+2026-07-14 19:05:21 | INFO    | [TRANSLATE] Circle selected
+2026-07-14 19:05:23 | INFO    | [TRANSLATE] Freehand selected
+2026-07-14 19:05:27 | INFO    | [TRANSLATE] Window selected
+2026-07-14 19:05:30 | INFO    | [TRANSLATE] Entire Screen selected
+2026-07-14 19:09:18 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-14 19:09:18
+Duration        : 0:04:12.903026
+============================================================
