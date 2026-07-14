@@ -204,30 +204,159 @@ class MenuBar:
 
 
     # --------------------------------------------------
-    # PLACEHOLDER MENUS
+    # TOOLS MENU
     # --------------------------------------------------
-    
+
     def create_tools_menu(self):
 
         tools_menu = tk.Menu(self.menu_bar, tearoff=0)
+
+        tools_menu.add_command(
+            label="OCR Languages",
+            command=lambda: self.menu_action(
+                "TOOLS",
+                "OCR Languages selected"
+            )
+        )
+
+        tools_menu.add_command(
+            label="History",
+            command=lambda: self.menu_action(
+                "TOOLS",
+                "History selected"
+            )
+        )
+
+        tools_menu.add_command(
+            label="Log Viewer",
+            command=lambda: self.menu_action(
+                "TOOLS",
+                "Log Viewer selected"
+            )
+        )
+
+        tools_menu.add_separator()
+
+        tools_menu.add_command(
+            label="Settings",
+            command=lambda: self.menu_action(
+                "TOOLS",
+                "Settings selected"
+            )
+        )
 
         self.menu_bar.add_cascade(
             label="Tools",
             menu=tools_menu
         )
 
+        
+    
+    # --------------------------------------------------
+    # VIEW MENU
+    # --------------------------------------------------
+
     def create_view_menu(self):
 
         view_menu = tk.Menu(self.menu_bar, tearoff=0)
+
+        theme_menu = tk.Menu(view_menu, tearoff=0)
+
+        theme_menu.add_command(
+            label="Light",
+            command=lambda: self.menu_action(
+                "VIEW",
+                "Light Theme selected"
+            )
+        )
+
+        theme_menu.add_command(
+            label="Dark",
+            command=lambda: self.menu_action(
+                "VIEW",
+                "Dark Theme selected"
+            )
+        )
+
+        theme_menu.add_command(
+            label="System",
+            command=lambda: self.menu_action(
+                "VIEW",
+                "System Theme selected"
+            )
+        )
+
+        view_menu.add_cascade(
+            label="Theme",
+            menu=theme_menu
+        )
+
+        view_menu.add_separator()
+
+        view_menu.add_command(
+            label="Always On Top",
+            command=lambda: self.menu_action(
+                "VIEW",
+                "Always On Top selected"
+            )
+        )
+
+        view_menu.add_command(
+            label="Reset Layout",
+            command=lambda: self.menu_action(
+                "VIEW",
+                "Reset Layout selected"
+            )
+        )
 
         self.menu_bar.add_cascade(
             label="View",
             menu=view_menu
         )
+    
+    # --------------------------------------------------
+    # HELP MENU
+    # --------------------------------------------------
 
     def create_help_menu(self):
 
         help_menu = tk.Menu(self.menu_bar, tearoff=0)
+
+        help_menu.add_command(
+            label="Documentation",
+            command=lambda: self.menu_action(
+                "HELP",
+                "Documentation selected"
+            )
+        )
+
+        help_menu.add_command(
+            label="Keyboard Shortcuts",
+            command=lambda: self.menu_action(
+                "HELP",
+                "Keyboard Shortcuts selected"
+            )
+        )
+
+        help_menu.add_separator()
+
+        help_menu.add_command(
+            label="Check for Updates",
+            command=lambda: self.menu_action(
+                "HELP",
+                "Check for Updates selected"
+            )
+        )
+
+        help_menu.add_separator()
+
+        help_menu.add_command(
+            label="About",
+            command=lambda: self.menu_action(
+                "HELP",
+                "About selected"
+            )
+        )
 
         self.menu_bar.add_cascade(
             label="Help",
