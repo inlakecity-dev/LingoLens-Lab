@@ -1,0 +1,5 @@
+deep-translator
+Pillow
+pytesseract
+pyautogui
+mss
