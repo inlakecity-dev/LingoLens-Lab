@@ -10,9 +10,11 @@ from logger import logger
 
 class MenuBar:
 
-    def __init__(self, root):
+    def __init__(self, root, controller):
 
         self.root = root
+        
+        self.controller = controller
 
         self.menu_bar = tk.Menu(root)
 
@@ -239,12 +241,9 @@ class MenuBar:
 
         tools_menu.add_command(
             label="Settings",
-            command=lambda: self.menu_action(
-                "TOOLS",
-                "Settings selected"
-            )
+            command=self.show_settings
         )
-
+        
         self.menu_bar.add_cascade(
             label="Tools",
             menu=tools_menu
@@ -352,16 +351,35 @@ class MenuBar:
 
         help_menu.add_command(
             label="About",
-            command=lambda: self.menu_action(
-                "HELP",
-                "About selected"
-            )
+             command=self.show_about
         )
 
         self.menu_bar.add_cascade(
             label="Help",
             menu=help_menu
         )
+        
+    # --------------------------------------------------
+    # Help ACTIONS
+    # --------------------------------------------------
+       
+    def show_about(self):
+
+        logger.info(
+            "HELP",
+            "About selected"
+        )
+
+        self.controller.show_about()
+        
+    def show_settings(self):
+
+        logger.info(
+            "TOOLS",
+            "Settings selected"
+        )
+
+        self.controller.show_settings()
 
     # --------------------------------------------------
     # MENU ACTIONS
