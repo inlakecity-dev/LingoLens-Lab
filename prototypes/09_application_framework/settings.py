@@ -5,7 +5,7 @@ Creates the Settings window.
 """
 
 import tkinter as tk
-
+from helpers import center_window, set_window_icon
 
 class SettingsWindow:
 
@@ -17,8 +17,10 @@ class SettingsWindow:
     def show(self):
 
         settings = tk.Toplevel(self.root)
+        
+        set_window_icon(settings)
 
-        settings.title("Settings")
+        settings.title("LingoLens Settings")
 
         settings.resizable(False, False)
 

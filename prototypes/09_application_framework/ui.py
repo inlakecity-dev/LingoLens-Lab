@@ -1,6 +1,8 @@
 import tkinter as tk
 
 import config
+print(config.__file__)
+print(dir(config))
 from helpers import center_window
 from menu import MenuBar
 from statusbar import StatusBar
@@ -12,6 +14,7 @@ class MainWindow:
     def __init__(self):
 
         self.root = tk.Tk()
+        self.root.iconbitmap(config.APP_ICON)
 
         self.root.title(config.APP_NAME)
         

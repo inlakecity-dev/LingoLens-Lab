@@ -5,6 +5,7 @@ Creates the About window.
 """
 
 import tkinter as tk
+from helpers import center_window, set_window_icon
 
 
 class AboutWindow:
@@ -16,6 +17,8 @@ class AboutWindow:
     def show(self):
 
         about = tk.Toplevel(self.root)
+        
+        set_window_icon(about)
 
         about.title("About LingoLens")
 

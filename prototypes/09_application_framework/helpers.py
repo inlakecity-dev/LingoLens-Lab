@@ -5,6 +5,8 @@ Shared utility functions used throughout the application.
 """
 
 import os
+import tkinter as tk
+import config
 
 
 def center_window(window, width, height):
@@ -36,3 +38,12 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+    
+def set_window_icon(window):
+    """
+    Set the application icon for any Tkinter window.
+    """
+
+    window.iconbitmap(
+        resource_path(config.APP_ICON)
+    )

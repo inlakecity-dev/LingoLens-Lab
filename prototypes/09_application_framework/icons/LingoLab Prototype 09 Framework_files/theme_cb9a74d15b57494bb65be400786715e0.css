@@ -1,0 +1,408 @@
+/* Theme Accenture Theme */
+:root {
+  --colors_primary_main: #7500c0;
+  --colors_primary_tint: #9d00ff;
+  --colors_primary_shade: #5e0099;
+  --colors_secondary_main: #7500c0;
+  --colors_secondary_tint: #9d00ff;
+  --colors_secondary_shade: #5e0099;
+  --colors_background_main: #7500c0;
+  --colors_background_tint: #9d00ff;
+  --colors_background_shade: #5e0099;
+  --colors_text_main: #1e293b;
+  --colors_text_tint: #3a5073;
+  --colors_text_shade: #18212f;
+  --colors_link_main: #10239e;
+  --colors_link_tint: #1630da;
+  --colors_link_shade: #0d1c7d;
+  --colors_success_main: #58cb24;
+  --colors_success_tint: #78df49;
+  --colors_success_shade: #48a51d;
+  --colors_warning_main: #fac714;
+  --colors_warning_tint: #fbd341;
+  --colors_warning_shade: #d2a504;
+  --colors_error_main: #ff222e;
+  --colors_error_tint: #ff4d55;
+  --colors_error_shade: #e6000b;
+  --colors_info_main: #64748b;
+  --colors_info_tint: #8291a5;
+  --colors_info_shade: #515e71;
+  --colors_neutral_main: #f2f3f4;
+  --colors_neutral_tint: #edeeee;
+  --colors_neutral_shade: #ffffff;
+  --colors_custom_main: #767676;
+  --colors_custom_tint: #919191;
+  --colors_custom_shade: #5e5e5e;
+  --colors_base_black: #000000;
+  --colors_base_white: #ffffff;
+  --colors_base_transparent: transparent;
+  --typography_title_large_font_family: var(--fonts_primary_font);
+  --typography_title_large_font_size: 24px;
+  --typography_title_large_font_weight: bold;
+  --typography_title_large_font_style: normal;
+  --typography_title_large_text_decoration: none;
+  --typography_title_font_family: var(--fonts_primary_font);
+  --typography_title_font_size: 20px;
+  --typography_title_font_weight: bold;
+  --typography_title_font_style: normal;
+  --typography_title_text_decoration: none;
+  --typography_subtitle_font_family: var(--fonts_primary_font);
+  --typography_subtitle_font_size: 16px;
+  --typography_subtitle_font_weight: bold;
+  --typography_subtitle_font_style: normal;
+  --typography_subtitle_text_decoration: none;
+  --typography_body_font_family: var(--fonts_primary_font);
+  --typography_body_font_size: 14px;
+  --typography_body_font_weight: normal;
+  --typography_body_font_style: normal;
+  --typography_body_text_decoration: none;
+  --typography_button_text_font_family: var(--fonts_primary_font);
+  --typography_button_text_font_size: 14px;
+  --typography_button_text_font_weight: normal;
+  --typography_button_text_font_style: normal;
+  --typography_button_text_text_decoration: none;
+  --typography_button_text_small_font_family: var(--fonts_primary_font);
+  --typography_button_text_small_font_size: 12px;
+  --typography_button_text_small_font_weight: bold;
+  --typography_button_text_small_font_style: normal;
+  --typography_button_text_small_text_decoration: none;
+  --buttons_primary_default_text_color: var(--colors_base_white);
+  --buttons_primary_default_fill_color: var(--colors_primary_main);
+  --buttons_primary_default_border_color: var(--colors_base_transparent);
+  --buttons_primary_default_border_width: 0;
+  --buttons_primary_default_border_radius: 10px;
+  --buttons_primary_hover_text_color: var(--colors_base_white);
+  --buttons_primary_hover_fill_color: var(--colors_primary_shade);
+  --buttons_primary_hover_border_color: var(--colors_base_transparent);
+  --buttons_primary_hover_border_width: 0;
+  --buttons_primary_hover_border_radius: 10px;
+  --buttons_primary_clicked_text_color: var(--colors_base_white);
+  --buttons_primary_clicked_fill_color: var(--colors_primary_shade);
+  --buttons_primary_clicked_border_color: var(--colors_base_transparent);
+  --buttons_primary_clicked_border_width: 0;
+  --buttons_primary_clicked_border_radius: 10px;
+  --buttons_secondary_default_text_color: var(--colors_primary_main);
+  --buttons_secondary_default_fill_color: var(--colors_base_transparent);
+  --buttons_secondary_default_border_color: var(--colors_primary_main);
+  --buttons_secondary_default_border_width: 1px;
+  --buttons_secondary_default_border_radius: 10px;
+  --buttons_secondary_hover_text_color: var(--colors_primary_shade);
+  --buttons_secondary_hover_fill_color: var(--colors_base_transparent);
+  --buttons_secondary_hover_border_color: var(--colors_primary_shade);
+  --buttons_secondary_hover_border_width: 1px;
+  --buttons_secondary_hover_border_radius: 10px;
+  --buttons_secondary_clicked_text_color: var(--colors_primary_shade);
+  --buttons_secondary_clicked_fill_color: var(--colors_base_transparent);
+  --buttons_secondary_clicked_border_color: var(--colors_primary_shade);
+  --buttons_secondary_clicked_border_width: 1px;
+  --buttons_secondary_clicked_border_radius: 10px;
+  --buttons_text_link_default_text_color: var(--colors_primary_main);
+  --buttons_text_link_default_fill_color: var(--colors_base_transparent);
+  --buttons_text_link_default_border_color: var(--colors_base_transparent);
+  --buttons_text_link_default_border_width: 0;
+  --buttons_text_link_default_border_radius: 0;
+  --buttons_text_link_hover_text_color: var(--colors_primary_shade);
+  --buttons_text_link_hover_fill_color: var(--colors_base_transparent);
+  --buttons_text_link_hover_border_color: var(--colors_base_transparent);
+  --buttons_text_link_hover_border_width: 0;
+  --buttons_text_link_hover_border_radius: 0;
+  --buttons_text_link_clicked_text_color: var(--colors_primary_shade);
+  --buttons_text_link_clicked_fill_color: var(--colors_base_transparent);
+  --buttons_text_link_clicked_border_color: var(--colors_base_transparent);
+  --buttons_text_link_clicked_border_width: 0;
+  --buttons_text_link_clicked_border_radius: 0;
+  --buttons_success_default_text_color: var(--colors_base_white);
+  --buttons_success_default_fill_color: var(--colors_success_main);
+  --buttons_success_default_border_color: var(--colors_base_transparent);
+  --buttons_success_default_border_width: var(--buttons_primary_default_border_width);
+  --buttons_success_default_border_radius: var(--buttons_primary_default_border_radius);
+  --buttons_success_hover_text_color: var(--colors_base_white);
+  --buttons_success_hover_fill_color: var(--colors_success_shade);
+  --buttons_success_hover_border_color: var(--colors_base_transparent);
+  --buttons_success_hover_border_width: var(--buttons_primary_hover_border_width);
+  --buttons_success_hover_border_radius: var(--buttons_primary_hover_border_radius);
+  --buttons_success_clicked_text_color: var(--colors_base_white);
+  --buttons_success_clicked_fill_color: var(--colors_success_shade);
+  --buttons_success_clicked_border_color: var(--colors_base_transparent);
+  --buttons_success_clicked_border_width: var(--buttons_primary_clicked_border_width);
+  --buttons_success_clicked_border_radius: var(--buttons_primary_clicked_border_radius);
+  --buttons_warning_default_text_color: var(--colors_base_white);
+  --buttons_warning_default_fill_color: var(--colors_warning_main);
+  --buttons_warning_default_border_color: var(--colors_base_transparent);
+  --buttons_warning_default_border_width: var(--buttons_primary_default_border_width);
+  --buttons_warning_default_border_radius: var(--buttons_primary_default_border_radius);
+  --buttons_warning_hover_text_color: var(--colors_base_white);
+  --buttons_warning_hover_fill_color: var(--colors_warning_shade);
+  --buttons_warning_hover_border_color: var(--colors_base_transparent);
+  --buttons_warning_hover_border_width: var(--buttons_primary_hover_border_width);
+  --buttons_warning_hover_border_radius: var(--buttons_primary_hover_border_radius);
+  --buttons_warning_clicked_text_color: var(--colors_base_white);
+  --buttons_warning_clicked_fill_color: var(--colors_warning_shade);
+  --buttons_warning_clicked_border_color: var(--colors_base_transparent);
+  --buttons_warning_clicked_border_width: var(--buttons_primary_clicked_border_width);
+  --buttons_warning_clicked_border_radius: var(--buttons_primary_clicked_border_radius);
+  --buttons_error_default_text_color: var(--colors_base_white);
+  --buttons_error_default_fill_color: var(--colors_error_main);
+  --buttons_error_default_border_color: var(--colors_base_transparent);
+  --buttons_error_default_border_width: var(--buttons_primary_default_border_width);
+  --buttons_error_default_border_radius: var(--buttons_primary_default_border_radius);
+  --buttons_error_hover_text_color: var(--colors_base_white);
+  --buttons_error_hover_fill_color: var(--colors_error_shade);
+  --buttons_error_hover_border_color: var(--colors_base_transparent);
+  --buttons_error_hover_border_width: var(--buttons_primary_hover_border_width);
+  --buttons_error_hover_border_radius: var(--buttons_primary_hover_border_radius);
+  --buttons_error_clicked_text_color: var(--colors_base_white);
+  --buttons_error_clicked_fill_color: var(--colors_error_shade);
+  --buttons_error_clicked_border_color: var(--colors_base_transparent);
+  --buttons_error_clicked_border_width: var(--buttons_primary_clicked_border_width);
+  --buttons_error_clicked_border_radius: var(--buttons_primary_clicked_border_radius);
+  --fonts_primary_font: "walkme-opensans";
+  --fonts_secondary_font: "Courier";
+  --gradients_main_angle: 90deg;
+  --gradients_main_stop_1: var(--colors_secondary_tint);
+  --gradients_main_stop_1_offset: 25%;
+  --gradients_main_stop_2: var(--colors_primary_shade);
+  --gradients_main_stop_2_offset: 75%;
+  --gradients_main: linear-gradient(var(--gradients_main_angle),var(--gradients_main_stop_1) var(--gradients_main_stop_1_offset),var(--gradients_main_stop_2) var(--gradients_main_stop_2_offset));
+  --buttons_primary_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_primary_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_primary_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_primary_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_primary_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_primary_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_primary_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_primary_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_primary_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_primary_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_primary_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_primary_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_primary_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_primary_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_primary_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_secondary_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_secondary_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_secondary_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_secondary_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_secondary_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_secondary_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_secondary_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_secondary_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_secondary_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_secondary_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_secondary_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_secondary_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_secondary_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_secondary_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_secondary_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_text_link_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_text_link_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_text_link_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_text_link_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_text_link_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_text_link_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_text_link_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_text_link_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_text_link_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_text_link_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_text_link_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_text_link_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_text_link_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_text_link_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_text_link_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_success_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_success_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_success_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_success_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_success_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_success_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_success_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_success_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_success_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_success_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_success_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_success_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_success_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_success_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_success_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_warning_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_warning_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_warning_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_warning_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_warning_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_warning_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_warning_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_warning_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_warning_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_warning_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_warning_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_warning_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_warning_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_warning_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_warning_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_error_default_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_error_default_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_error_default_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_error_default_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_error_default_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_error_hover_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_error_hover_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_error_hover_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_error_hover_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_error_hover_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+  --buttons_error_clicked_text_typography_font_family: var(--typography_button_text_font_family);
+  --buttons_error_clicked_text_typography_font_size: var(--typography_button_text_font_size);
+  --buttons_error_clicked_text_typography_font_weight: var(--typography_button_text_font_weight);
+  --buttons_error_clicked_text_typography_font_style: var(--typography_button_text_font_style);
+  --buttons_error_clicked_text_typography_text_decoration: var(--typography_button_text_text_decoration);
+}
+
+.walkme-survey-balloon .walkme-survey-title {
+    font-family: var(--typography_title_large_font_family) !important;
+    font-size: var(--typography_title_large_font_size, 24px) !important;
+    font-weight: var(--typography_title_large_font_weight, bold) !important;
+    font-style: var(--typography_title_large_font_style, normal) !important;
+    text-decoration: var(--typography_title_large_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
+.walkme-survey-balloon .walkme-survey-sub-title {
+    font-family: var(--typography_title_font_family) !important;
+    font-size: var(--typography_title_font_size, 20px) !important;
+    font-weight: var(--typography_title_font_weight, bold) !important;
+    font-style: var(--typography_title_font_style, normal) !important;
+    text-decoration: var(--typography_title_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
+.walkme-survey-balloon .walkme-survey-question-title {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
+.walkme-survey-balloon .walkme-survey-question-sub-title {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
+.walkme-survey-balloon .walkme-survey-answer-title {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
+.walkme-survey-balloon .walkme-survey-question-mandatory {
+    color: var(--colors_error_main, #ff222e) !important;
+}
+.walkme-survey-balloon #walkme-survey-low-score-span, .walkme-survey-balloon #walkme-survey-high-score-span {
+    font-family: var(--typography_button_text_small_font_family) !important;
+    font-size: var(--typography_button_text_small_font_size, 12px) !important;
+    font-weight: var(--typography_button_text_small_font_weight, normal) !important;
+    font-style: var(--typography_button_text_small_font_style, normal) !important;
+    text-decoration: var(--typography_button_text_small_text_decoration, none) !important;
+    color: var(--colors_info_main, #64748b) !important;
+}
+.walkme-survey-balloon .walkme-survey-answer-label-rating-radiobutton > svg > path {
+    stroke: var(--colors_primary_main, #1577ff) !important;
+}
+.walkme-survey-balloon .walkme-survey-validation-errors {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_info_main, #64748b) !important;
+}
+.walkme-survey-balloon .walkme-survey-answer-textarea {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_text_tint, #3a5073) !important;
+}
+.walkme-survey-balloon .walkme-survey-nps-answer > label {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_primary_main, #1577ff) !important;
+    background-color: var(--colors_base_white, #ffffff) !important;
+    border-color: var(--colors_primary_main, #1577ff) !important;
+}
+.walkme-survey-balloon .walkme-survey-nps-answer.selected > label {
+    color: var(--colors_base_white, #ffffff) !important;
+    background-color: var(--colors_primary_shade, #005bdb) !important;
+}
+.walkme-survey-balloon .walkme-survey-question-count {
+    color: var(--colors_info_main, #64748b) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-inner-div {
+    background-color: var(--colors_base_white, #ffffff) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-top-div {
+    background-color: var(--colors_base_white, #ffffff) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-bottom-div {
+    background-color: var(--colors_base_white, #ffffff) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-separator {
+    background-color: var(--colors_base_white, #ffffff) !important;
+}
+.walkme-survey-balloon input[type='radio'].walkme-survey-answer.walkme-survey-answer-radiobutton, .walkme-survey-balloon input[type='checkbox'].walkme-survey-answer.walkme-survey-answer-checkbox {
+    accent-color: var(--colors_primary_main, #1577ff) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-normal-button {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_base_white, #ffffff) !important;
+    background-color: var(--colors_primary_main, #1577ff) !important;
+    border-color: var(--colors_primary_main, #1577ff) !important;
+}
+.walkme-survey-balloon .walkme-survey-balloon .walkme-custom-balloon-normal-button:hover {
+    background-color: var(--colors_primary_shade, #005BDB) !important;
+    border-color: var(--colors_primary_shade, #005BDB) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-weak-button {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_primary_main, #1577ff) !important;
+    background-color: var(--colors_base_white, #ffffff) !important;
+    border-color: var(--colors_primary_main, #1577ff) !important;
+}
+.walkme-survey-balloon .walkme-custom-balloon-weak-button:hover {
+    border-color: var(--colors_primary_shade, #005BDB) !important;
+    color: var(--colors_primary_shade, #005BDB) !important;
+}
+#walkme-player.walkme-california.walkme-themed-player {
+    background-color: var(--colors_primary_main) !important;
+}
+.walkme-survey-balloon .walkme-survey-rating-answer {
+    font-family: var(--typography_button_text_small_font_family) !important;
+    font-size: var(--typography_button_text_small_font_size, 12px) !important;
+    font-weight: var(--typography_button_text_small_font_weight, normal) !important;
+    font-style: var(--typography_button_text_small_font_style, normal) !important;
+    text-decoration: var(--typography_button_text_small_text_decoration, none) !important;
+    color: var(--colors_info_main, #64748b) !important;
+}
+.walkme-survey-balloon .walkme-survey-question-checkbox-answers,
+.walkme-survey-balloon .walkme-survey-question-checkbox-answer .walkme-survey-answer-text {
+    font-family: var(--typography_body_font_family) !important;
+    font-size: var(--typography_body_font_size, 14px) !important;
+    font-weight: var(--typography_body_font_weight, normal) !important;
+    font-style: var(--typography_body_font_style, normal) !important;
+    text-decoration: var(--typography_body_text_decoration, none) !important;
+    color: var(--colors_text_main, #1e293b) !important;
+}
