@@ -1,5 +1,6 @@
 from PIL import ImageGrab
 
+
 def capture_fullscreen():
     """
     Capture the entire screen.
@@ -8,8 +9,8 @@ def capture_fullscreen():
         PIL.Image: Screenshot of the full screen.
     """
     return ImageGrab.grab()
-    
-    
+
+
 def capture_region(x1, y1, x2, y2):
     """
     Capture a selected screen region.
@@ -21,7 +22,13 @@ def capture_region(x1, y1, x2, y2):
     Returns:
         PIL.Image: Screenshot of the selected region.
     """
-    return ImageGrab.grab(
+
+    image = ImageGrab.grab(
         bbox=(x1, y1, x2, y2)
     )
-    
+
+    # Temporary debugging
+    image.save("debug_capture.png")
+    print("Debug image saved: debug_capture.png")
+
+    return image

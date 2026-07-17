@@ -1,0 +1,45 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 17 July 2026
+Time            : 17:15:22
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+विस्तार
+
+भारतीय रेलवे स्वच्छ गतिशीलता के अगले कदम के तौर पर स्वदेशी हाइड्रोजन फ्यूल सेल तकनीक
+अपना रही है। इसी क्रम में प्रधानमंत्री नरेंद्र मोदी शुक्रवार को जींद-सोनीपत के बीच हाइड्रोजन-
+संचालित ट्रेन को हरी झंडी दिखाने वाले हैं, जो देश के रेलवे नेटवर्क में इस तकनीक के परिचालन की.
+शुरुआत का प्रतीक है।
+
+मंत्रालय की ओर से जारी बयान के मुताबिक, नई हाइड्रोजन-संचालित ट्रेन और सहायक रीफ्यूलिंग
+बुनियादी ढांचा टिकाऊ, आत्मनिर्भर रेल परिवहन की दिशा में देश के प्रयासों को प्रदर्शित करता है।
+मंत्रालय ने बताया कि ऊपर से गुजरने वाले बिजली के तारों पर निर्भर पारंपरिक इलेक्ट्रिक ट्रेनों के
+विपरीत हाइड्रोजन फ्यूल सेल ट्रेन अपनी खुद की बिजली पैदा करती है यानी यह ट्रेन ऊर्जा स्रोत खुद
+ही साथ लेकर चलती है।
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+expansion
+
+Indian Railways indigenous hydrogen fuel cell technology as next step in clean mobility
+Adopting. In this sequence, Prime Minister Narendra Modi on Friday launched hydrogen between Jind-Sonipat.
+Who are going to flag off the operated train, which will operationalize this technology in the railway network of the country.
+Symbolizes the beginning.
+
+According to the statement issued by the ministry, the new hydrogen-powered train and assisted refueling.
+The infrastructure demonstrates the country's efforts towards sustainable, self-reliant rail transportation.
+The ministry said that traditional electric trains depend on overhead power lines.
+Unlike hydrogen fuel cell train, it generates its own electricity i.e. the train uses its own energy source.
+She carries it along with her.
+
+============================================================

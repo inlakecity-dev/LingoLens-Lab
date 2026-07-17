@@ -1,5 +1,12 @@
 from ui import MainWindow
 from logger import logger
+from core.display import enable_dpi_awareness
+
+enable_dpi_awareness()
+
+import tkinter as tk
+
+root = tk.Tk()
 
 
 def main():

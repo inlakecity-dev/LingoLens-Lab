@@ -21,6 +21,7 @@ def translate_region(
     y1,
     x2,
     y2,
+    ocr_languages=None,
     source_language=DEFAULT_SOURCE_LANGUAGE,
     target_language=DEFAULT_TARGET_LANGUAGE,
 ):
@@ -61,7 +62,10 @@ def translate_region(
     )
 
     # Extract text from image
-    original_text = extract_text(image)
+    original_text = extract_text(
+        image,
+        languages=ocr_languages,
+    )
 
     # Translate extracted text
     translated_text = translate_text(
@@ -83,4 +87,7 @@ def translate_region(
         "original": original_text,
         "translation": translated_text,
         "history_file": history_file,
+        "ocr_language": ocr_languages,
+        "source_language": source_language,
+        "target_language": target_language,
     }
