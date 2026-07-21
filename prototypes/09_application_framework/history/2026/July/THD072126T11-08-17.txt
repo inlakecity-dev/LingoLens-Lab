@@ -1,0 +1,31 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 21 July 2026
+Time            : 11:08:17
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+महिलाओं की दूरी की वजह लैंगिक असमानता
+
+एक्सपर्ट्स के मुताबिक जेंडर गैप कम होने का दूसरा कारण युवा महिलाओं का धर्म से विमुख
+होना है। पब्लिक रिलिजन रिसर्च इंस्टीट्यूट के अनुसार, 2013 में 29% युवा महिलाएं खुद को
+किसी धर्म से जुड़ा नहीं मानती थीं, जो 2025 में 43% हो गया।
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+Gender inequality is the reason for women's distance
+
+According to experts, the second reason for reducing the gender gap is young women turning away from religion.
+Has to happen. According to the Public Religion Research Institute, in 2013, 29% of young women identified themselves as
+Did not believe in belonging to any religion, which increased to 43% in 2025.
+
+============================================================

@@ -27,7 +27,7 @@ APP_ICON = "assets/branding/LingoLens_Icon.ico"
 # Fonts
 # ==========================================================
 
-FONT = ("Segoe UI", 10)
+FONT = ("Nirmala UI", 11)
 
 # ==========================================================
 # # Tesseract OCR executable path
@@ -36,6 +36,12 @@ FONT = ("Segoe UI", 10)
 TESSERACT_PATH = (
     r"C:\Users\harish.singh.bisht\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
 )
+
+# ==========================================================
+# OCR Configuration
+# ==========================================================
+
+OCR_LANGUAGES = "hin+jpn+eng+chi_sim"
 
 # ==========================================================
 # Translation Configuration
@@ -50,9 +56,3 @@ DEFAULT_TARGET_LANGUAGE = "en"
 
 HISTORY_FOLDER = "history"
 
-# ==========================================================
-# Translation Configuration
-# ==========================================================
-
-DEFAULT_SOURCE_LANGUAGE = "auto"
-DEFAULT_TARGET_LANGUAGE = "en"

@@ -3,7 +3,7 @@ logger.py
 
 Central logging system for LingoLens.
 """
-
+import config
 from pathlib import Path
 from datetime import datetime
 
@@ -36,7 +36,7 @@ class Logger:
         header = (
             "\n"
             + "=" * 60 + "\n"
-            + "LingoLens v0.9\n"
+            + f"LingoLens v{config.VERSION}\n"
             + f"Session Started : {self.session_start.strftime('%Y-%m-%d %H:%M:%S')}\n"
             + "=" * 60
         )

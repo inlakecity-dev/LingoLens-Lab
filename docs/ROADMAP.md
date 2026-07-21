@@ -2,7 +2,11 @@
 
 
 
-This document tracks the planned development of LingoLens from the initial application framework to a complete cross-platform translation assistant.
+> This roadmap is a living document and will evolve as LingoLens grows.
+
+
+
+The goal of LingoLens is to build a lightweight translation assistant that allows users to understand foreign-language content without interrupting their workflow.
 
 
 
@@ -10,33 +14,53 @@ This document tracks the planned development of LingoLens from the initial appli
 
 
 
-\# Version 0.1 – Professional Application Framework
+\# Version 0.5 – Professional Application Framework
 
 
 
-\## Completed
+\## Features Completed
 
 
 
-\- ✅ Application Framework
+\- ✅ Professional Application Framework
 
 \- ✅ Modular Architecture
+
+\- ✅ Controller-Based Design
 
 \- ✅ Logger Framework
 
 \- ✅ Complete Menu Framework
 
+\- ✅ Status Bar
+
+\- ✅ About Window
+
+\- ✅ Settings Window
+
+\- ✅ Shared Helper Functions
+
+\- ✅ Application Branding
+
+\- ✅ Window Icons
+
+\- ✅ Backend Foundation
+
+\- ✅ Region Selection Pipeline
+
+\- ✅ OCR Processing Pipeline
+
+\- ✅ Translation Pipeline
+
+\- ✅ History Pipeline
 
 
-\## In Progress
+
+\## Status
 
 
 
-\- ⬜ Status Bar
-
-\- ⬜ Final Application Logo
-
-\- ⬜ Window Icon (.ico)
+🎉 Completed
 
 
 
@@ -44,7 +68,7 @@ This document tracks the planned development of LingoLens from the initial appli
 
 
 
-\# Version 0.5 – Core Translation
+\# Version 0.6 – OCR Integration
 
 
 
@@ -52,39 +76,35 @@ This document tracks the planned development of LingoLens from the initial appli
 
 
 
-\- ⬜ OCR Engine
+\- ⬜ Integrate Tesseract OCR
 
-\- ⬜ OCR Language Support
+\- ⬜ Multiple OCR Language Support
 
+\- ⬜ OCR Configuration
 
+\- ⬜ OCR Error Handling
 
-\## Translation
-
-
-
-\- ⬜ Translation Engine
-
-\- ⬜ Translation History
-
-\- ⬜ Clipboard Translation
-
-\- ⬜ Image Translation
+\- ⬜ OCR Performance Improvements
 
 
 
-\## Logging
+\## Capture
 
 
 
-\- ⬜ Advanced Logging
+\- ⬜ Region Capture Integration
 
-&#x20; - INFO
+\- ⬜ Screenshot Processing
 
-&#x20; - WARNING
+\- ⬜ Image Preprocessing
 
-&#x20; - ERROR
 
-&#x20; - DEBUG
+
+\## Status
+
+
+
+🔄 In Development
 
 
 
@@ -92,7 +112,45 @@ This document tracks the planned development of LingoLens from the initial appli
 
 
 
-\# Version 1.0 – First Public Release
+\# Version 0.7 – Translation Features
+
+
+
+\## Translation
+
+
+
+\- ⬜ Translation Engine Integration
+
+\- ⬜ Translation History
+
+\- ⬜ Clipboard Translation
+
+\- ⬜ Image Translation
+
+\- ⬜ Auto Detect Source Language
+
+\- ⬜ User Selectable Output Language
+
+
+
+\## History
+
+
+
+\- ⬜ Search History
+
+\- ⬜ Export History
+
+\- ⬜ Clear History
+
+
+
+\---
+
+
+
+\# Version 0.8 – Floating Lens Prototype
 
 
 
@@ -104,41 +162,47 @@ This document tracks the planned development of LingoLens from the initial appli
 
 \- ⬜ Live Translation
 
+\- ⬜ Lens Overlay
+
+\- ⬜ Always-On-Top Mode
+
+
+
+\## Lens Interaction
+
+
+
 \- ⬜ Snap
 
 \- ⬜ Save
 
+\- ⬜ Drag \& Move
 
-
-\## Selection Modes
-
-
-
-\- ⬜ Rectangle
-
-\- ⬜ Circle
-
-\- ⬜ Freehand
-
-\- ⬜ Window
-
-\- ⬜ Entire Screen
+\- ⬜ Resize Lens
 
 
 
-\## OCR \& Language Detection
+\---
 
 
 
-\- ⬜ Automatic OCR Language Detection
+\# Version 0.9 – User Experience
 
-\- ⬜ Automatic Source Language Detection
 
-\- ⬜ User Selectable Output Language
 
-\- ⬜ Display Detected Language inside the Lens
+\## User Interface
 
-\- ⬜ Dynamic Language Detection while moving the Lens
+
+
+\- ⬜ Light Theme
+
+\- ⬜ Dark Theme
+
+\- ⬜ Theme Memory
+
+\- ⬜ Window Position Memory
+
+\- ⬜ Window Size Memory
 
 
 
@@ -156,15 +220,69 @@ This document tracks the planned development of LingoLens from the initial appli
 
 
 
-\## Application Experience
+\## OCR Experience
 
 
 
-\- ⬜ Remember Window Position
+\- ⬜ Automatic OCR Language Detection
 
-\- ⬜ Remember Window Size
+\- ⬜ Display Detected Language
 
-\- ⬜ Remember Selected Theme
+\- ⬜ Dynamic Language Detection
+
+
+
+\---
+
+
+
+\# Version 1.0 – First Public Release
+
+
+
+\## Release Goals
+
+
+
+\- ⬜ Stable Application
+
+\- ⬜ Floating Translation Lens
+
+\- ⬜ OCR
+
+\- ⬜ Translation
+
+\- ⬜ Translation History
+
+\- ⬜ Documentation
+
+\- ⬜ Installer
+
+\- ⬜ User Guide
+
+
+
+\## Supported Selection Modes
+
+
+
+\- ⬜ Rectangle
+
+\- ⬜ Circle
+
+\- ⬜ Freehand
+
+\- ⬜ Window
+
+\- ⬜ Entire Screen
+
+
+
+\## Status
+
+
+
+🚀 Planned Public Release
 
 
 
@@ -210,17 +328,17 @@ This document tracks the planned development of LingoLens from the initial appli
 
 \- ⬜ AI Context Translation
 
+\- ⬜ Offline Translation
+
+\- ⬜ Custom Translation Providers
+
 
 
 \### Notes
 
 
 
-FloatingLens.exe will be installed together with LingoLens.
-
-
-
-Both applications will use the same backend while providing different user experiences.
+Both applications will share the same backend while providing different user experiences.
 
 
 
@@ -234,19 +352,55 @@ Both applications will use the same backend while providing different user exper
 
 
 
+\# Git Milestones
+
+
+
+\- ✅ Framework Stable
+
+\- ⬜ OCR Stable
+
+\- ⬜ Translation Stable
+
+\- ⬜ Floating Lens Prototype
+
+\- ⬜ Beta Release
+
+\- ⬜ Version 1.0
+
+\- ⬜ Version 2.0
+
+
+
+\---
+
+
+
 \# Long-Term Ideas
 
 
 
-These ideas are intentionally postponed to keep the current development focused.
+These ideas are intentionally postponed to keep development focused.
 
 
-
-\- ⬜ Splash Screen
-
-\- ⬜ About Window Branding
-
-\- ⬜ Theme Customization
 
 \- ⬜ Cross-Platform Support
+
+\- ⬜ Linux Support
+
+\- ⬜ macOS Support
+
+\- ⬜ Mobile Companion
+
+\- ⬜ OCR Engine Selection
+
+\- ⬜ AI Translation Providers
+
+\- ⬜ Cloud Synchronization
+
+\- ⬜ Workspace Profiles
+
+\- ⬜ About Window Branding Improvements
+
+\- ⬜ Splash Screen
 

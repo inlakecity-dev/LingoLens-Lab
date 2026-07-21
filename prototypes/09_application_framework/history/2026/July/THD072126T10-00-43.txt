@@ -1,0 +1,43 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 21 July 2026
+Time            : 10:00:43
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+What actually fixed it?
+
+It wasn't one change—it was the combination:
+1 TranslationView became part of the main window.
+2. RegionSelector became a Toplevel .
+3. RegionSelector became a child of the main window.
+4, mainloop() was replaced with wait_window() .
+
+5. select_region(self.root) linked everything together.
+
+This is why debugging one change at a time matters.
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+What actually fixed it?
+
+It wasn't one change—it was the combination:
+1 TranslationView became part of the main window.
+2. RegionSelector became a Toplevel .
+3. RegionSelector became a child of the main window.
+4, mainloop() was replaced with wait_window() .
+
+5. select_region(self.root) linked everything together.
+
+This is why debugging one change at a time matters.
+
+============================================================

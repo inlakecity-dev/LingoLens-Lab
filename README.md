@@ -1,112 +1,188 @@
 # LingoLens
 
-**Read. Understand. Continue.**
+> **Read. Understand. Continue.**
 
-LingoLens started from a real problem I faced while working on international virtual events.
+LingoLens is an OCR-powered translation tool designed to help users understand foreign-language content **without interrupting their workflow**.
 
-During live events, I often received attendee questions, registration forms, technical messages and other information written in Japanese or other languages.
+Instead of translating an entire webpage, document, or application, LingoLens allows you to translate **only the text you need**, exactly where you're looking.
 
-Most of the time, I didn't want to translate the entire webpage or application.
+---
 
-I only wanted to understand one small part of it.
+# Why LingoLens?
 
-For example, during a live event, a question might suddenly appear in Japanese.
+The idea for LingoLens came from a real-world challenge I encountered while supporting international virtual events.
 
-Before taking any action, I first needed to know:
+During live events, I frequently received attendee questions, registration forms, technical messages, and support requests written in Japanese and other languages.
 
-- Is this question for the presenter?
-- Is this a technical issue?
+Most of the time, I didn't need to translate an entire webpage.
+
+I only needed to understand a small section before deciding what action to take.
+
+For example, an attendee question might suddenly appear in Japanese.
+
+Before responding, I first needed to know:
+
+- Is this a question for the presenter?
+- Is it a technical issue?
 - Does the attendee need support?
 - Or is it simply a general question?
 
-Opening Google Translate every few minutes, copying the text, pasting it, reading the translation and then returning to the event was possible—but it interrupted my workflow every time.
+The usual workflow looked like this:
 
-Browser translation also wasn't the right solution because I wanted the rest of the interface to stay exactly as it was. I only needed to translate the information that mattered at that moment.
+1. Open Google Translate
+2. Copy the text
+3. Paste it
+4. Read the translation
+5. Return to the event
 
-That is where the idea of LingoLens came from.
+Although it worked, repeating this process throughout a live event constantly interrupted my concentration.
 
-Instead of translating everything, LingoLens focuses on translating only the text you need, exactly where you are looking, without interrupting your work.
+Browser translation wasn't the right solution either because I wanted the rest of the interface to remain exactly as it was.
+
+I only wanted to translate the information that mattered at that moment.
+
+That simple frustration became the idea behind **LingoLens**.
 
 ---
 
-## Vision
+# Vision
 
-The goal of LingoLens is simple.
+The goal of LingoLens is simple:
 
-Help users understand information in different languages without forcing them to switch between applications.
+> **Help people understand information written in other languages without forcing them to leave what they are doing.**
 
-Whether it is:
+Whether the text appears in:
 
 - Live event Q&A
 - Registration forms
-- Technical dashboards
 - PDFs
 - Images
+- Technical dashboards
 - Software interfaces
 - Pop-up messages
 
-the translation should appear only where it is needed while everything else stays unchanged.
+LingoLens translates **only the selected content**, leaving everything else untouched.
 
 ---
 
-## Features (Current & Planned)
+# Features
 
-### Current
-- ✅ Professional application framework
-- ✅ Modular architecture
-- ✅ Session logging
-- ✅ Complete application menu framework
-- 🔄 Prototype 09 in active development
+## Current
 
-### Planned
-- OCR text recognition
+- ✅ Modular application architecture
+- ✅ Professional desktop application framework
+- ✅ Centralized logging system
+- ✅ Reusable UI framework
+- ✅ Region capture pipeline
+- ✅ OCR and translation backend
+- 🔄 Version 0.5 currently under active development
+
+## Planned
+
 - Floating Translation Lens
 - Live Translation Mode
 - Translation History
 - Clipboard Translation
 - Image Translation
 - Multiple OCR language support
+- Auto language detection
 - Light & Dark themes
+- Plugin support
 
 ---
 
-## Project Philosophy
+# Technology Stack
 
-While building LingoLens, one simple idea became the foundation of the project.
+- Python
+- Tkinter
+- Tesseract OCR
+- Deep Translator
+- Pillow
+- Logging
+- Modular MVC-style architecture
+
+---
+
+# Project Philosophy
+
+Two ideas guide every feature added to LingoLens.
 
 > **The translation was never the problem. The interruption was.**
 
-Another principle followed throughout development is:
+and
 
 > **Every frustration is a design opportunity.**
 
+Rather than adding features for the sake of features, the goal is to remove unnecessary interruptions from the user's workflow.
+
 ---
 
-## Development Status
+# Project Status
 
 LingoLens is currently under active development.
 
-The project is being built step by step, starting with a solid application framework before integrating OCR, translation, and the Floating Lens experience.
+The project is being built incrementally, beginning with a stable application framework before expanding into OCR, translation, and the Floating Lens experience.
 
-The development journey, roadmap, and future plans are documented in the **docs** folder.
-
----
-
-## Contributing
-
-LingoLens is an open project.
-
-Ideas, suggestions, bug reports, and contributions are always welcome.
-
-If you have an idea that can improve the reading or translation workflow, feel free to open an issue or contribute to the project.
+Each feature is developed, tested, and documented before moving to the next milestone.
 
 ---
 
-## Thank You
+# Roadmap
+
+### Version 0.5
+
+- ✅ Application framework
+- ✅ Logging
+- ✅ UI framework
+- ✅ Menu system
+- ✅ Settings & About windows
+- ✅ Backend architecture
+- 🔄 OCR integration
+- 🔄 Translation integration
+- 🔄 History module
+
+### Version 1.0
+
+- Floating Translation Lens
+- Screen region translation
+- Save & Snap
+- Improved user experience
+
+### Future
+
+- AI-assisted translation
+- Plugin architecture
+- Additional OCR engines
+- Offline translation support
+
+---
+
+# Installation
+
+Coming Soon.
+
+---
+
+# Contributing
+
+Contributions, ideas, suggestions, and bug reports are always welcome.
+
+If you have an idea that can improve the reading or translation workflow, feel free to open an issue or submit a pull request.
+
+---
+
+# Author
+
+**Harish Singh Bisht**
+
+Broadcast & AV Engineer | Python Learner | Creator of LingoLens
+
+---
+
+# Thank You
 
 Thank you for visiting the project.
 
-I hope LingoLens eventually becomes a useful tool for anyone who works across different languages.
+I hope LingoLens becomes a useful tool for anyone who works across different languages.
 
-Created by Harish Singh Bisht
-
+If this project helps even one person stay focused instead of constantly switching between applications, then it has achieved its purpose.

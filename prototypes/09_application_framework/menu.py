@@ -72,7 +72,7 @@ class MenuBar:
         
         file_menu.add_command(
             label="Exit",
-            command=self.root.quit
+            command=self.exit_application
         )
 
         self.menu_bar.add_cascade(
@@ -130,10 +130,7 @@ class MenuBar:
 
         selection_menu.add_command(
             label="Rectangle",
-            command=lambda: self.menu_action(
-                "TRANSLATE",
-                "Rectangle selected"
-            )
+            command=self.controller.start_rectangle_translation
         )
 
         selection_menu.add_command(
@@ -359,10 +356,11 @@ class MenuBar:
             menu=help_menu
         )
         
+  
     # --------------------------------------------------
-    # Help ACTIONS
+    # HELP ACTIONS
     # --------------------------------------------------
-       
+
     def show_about(self):
 
         logger.info(
@@ -371,7 +369,7 @@ class MenuBar:
         )
 
         self.controller.show_about()
-        
+
     def show_settings(self):
 
         logger.info(
@@ -380,6 +378,15 @@ class MenuBar:
         )
 
         self.controller.show_settings()
+
+    def exit_application(self):
+
+        logger.info(
+            "FILE",
+            "Application Exit"
+        )
+
+        self.root.destroy()
 
     # --------------------------------------------------
     # MENU ACTIONS

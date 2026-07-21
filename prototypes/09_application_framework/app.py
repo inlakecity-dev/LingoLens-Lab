@@ -6,22 +6,21 @@ enable_dpi_awareness()
 
 import tkinter as tk
 
-root = tk.Tk()
-
 
 def main():
 
     logger.start_session()
 
-    logger.info("APP", "Application Started")
+    try:
+        logger.info("APP", "Application Started")
 
-    app = MainWindow()
+        app = MainWindow()
+        app.run()
 
-    app.run()
+        logger.info("APP", "Application Closed")
 
-    logger.info("APP", "Application Closed")
-
-    logger.end_session()
+    finally:
+        logger.end_session()
 
 
 if __name__ == "__main__":

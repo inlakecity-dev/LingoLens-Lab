@@ -9,10 +9,14 @@ from helpers import center_window, set_window_icon
 
 class SettingsWindow:
 
-    def __init__(self, root):
+    def __init__(
+        self,
+        root,
+        app_settings
+    ):
 
         self.root = root
-        
+        self.app_settings = app_settings
         
     def show(self):
 
@@ -24,7 +28,11 @@ class SettingsWindow:
 
         settings.resizable(False, False)
 
-        settings.geometry("450x300")
+        center_window(
+            settings,
+            450,
+            300
+        )
         
         tk.Label(
             settings,

@@ -7,8 +7,10 @@ for LingoLens.
 
 import tkinter as tk
 
+MIN_SELECTION_SIZE = 10
 
-def select_region():
+
+def select_region(parent):
     """
     Display a transparent fullscreen window that allows
     the user to select a rectangular region.
@@ -16,11 +18,16 @@ def select_region():
     Returns:
         tuple:
             (x1, y1, x2, y2)
+
+        or
+
+        None
+            if the selection is cancelled.
     """
 
     coordinates = {}
 
-    root = tk.Tk()
+    root = tk.Toplevel(parent)
     root.title("LingoLens Region Selector")
 
     root.attributes("-fullscreen", True)
@@ -38,6 +45,10 @@ def select_region():
     canvas.pack(fill="both", expand=True)
 
     rectangle = None
+
+    def cancel_selection(event=None):
+        coordinates.clear()
+        root.destroy()
 
     def on_press(event):
         nonlocal rectangle
@@ -60,13 +71,34 @@ def select_region():
                 rectangle,
                 coordinates["x1"],
                 coordinates["y1"],
-                event.x,
-                event.y,
+                event.x_root,
+                event.y_root,
             )
 
     def on_release(event):
+
         coordinates["x2"] = event.x_root
         coordinates["y2"] = event.y_root
+
+        # Normalize coordinates
+        x1 = min(coordinates["x1"], coordinates["x2"])
+        y1 = min(coordinates["y1"], coordinates["y2"])
+        x2 = max(coordinates["x1"], coordinates["x2"])
+        y2 = max(coordinates["y1"], coordinates["y2"])
+
+        # Ignore accidental clicks
+        if (
+            (x2 - x1) < MIN_SELECTION_SIZE
+            or
+            (y2 - y1) < MIN_SELECTION_SIZE
+        ):
+            cancel_selection()
+            return
+
+        coordinates["x1"] = x1
+        coordinates["y1"] = y1
+        coordinates["x2"] = x2
+        coordinates["y2"] = y2
 
         root.destroy()
 
@@ -74,7 +106,14 @@ def select_region():
     canvas.bind("<B1-Motion>", on_drag)
     canvas.bind("<ButtonRelease-1>", on_release)
 
-    root.mainloop()
+    root.bind("<Escape>", cancel_selection)
+
+    root.grab_set()
+    root.focus_force()
+    root.wait_window()
+
+    if not coordinates:
+        return None
 
     return (
         coordinates["x1"],

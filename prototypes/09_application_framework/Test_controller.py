@@ -79,6 +79,18 @@ def print_results(result, elapsed_time):
     print("Translation Result")
     print("=" * 60)
 
+    print("\nStatus")
+    print("-" * 60)
+
+    if result["status"] == "no_text":
+        print("No text detected.")
+        print("\nProcessing Time")
+        print("-" * 60)
+        print(f"{elapsed_time:.2f} seconds")
+        return
+
+    print("Success")
+
     print("\nOriginal Text")
     print("-" * 60)
     print(result["original"])
@@ -107,10 +119,6 @@ def print_results(result, elapsed_time):
     print("-" * 60)
     print(f"{elapsed_time:.2f} seconds")
 
-    print("\nStatus")
-    print("-" * 60)
-    print("Success")
-
 
 # ==========================================================
 # Main
@@ -135,7 +143,13 @@ def main():
     print("\nLaunching Region Selector...")
     print("Click and drag to select the text you want to translate.\n")
 
-    x1, y1, x2, y2 = select_region()
+    selection = select_region()
+
+    if selection is None:
+        print("\nSelection cancelled.")
+        return
+
+    x1, y1, x2, y2 = selection
 
     print("\nSelected Region")
     print("-" * 60)

@@ -1,0 +1,39 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 21 July 2026
+Time            : 12:06:43
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+①. は じ め に
+
+言 語 を 学 ぶ こ と は 文 化 を 学 ぶ こ と で あ る と よ く 言 わ れ ま す 。 外 国 語 の 習 得 は 個 人 の ア イ デ ン テ ィ テ ィ に 影 響 を 与 え 、 物 事 を 多 角 的 に 考 え 、 コ ミ
+ュ ニ ケ ー シ ョ ン し て い く 能 力 、 複 言 語 ・ 複 文 化 能 力 を 育 み 、 個 人 の ` 私 の 言 葉 、 私 の 文 化 」 を 豊 か に 成 長 さ せ ま す 。
+本 稿 で は 、 ビ デ オ ` ひ き だ す に ほ ん ご 」 (20228) を 通 し て 、 自 分 の 意 見 を 日 本 語 で 表 現 す る 授 業 活 動 を 紹 介 し ま す 。` ひ き だ す に ほ ん ご 」 は 、
+日 本 語 学 習 者 の 視 点 か ら 自 分 の 言 語 や 文 化 と 日 本 を つ な ぐ ` 仲 介 」 と い う 概 念 を 取 り 上 げ て 、 異 な る 文 化 の 間 に 立 っ た 時 、 そ れ を 解 釈 し 、 問 題
+を 解 決 す る た め に ど ん な コ ミ ュ ニ ケ ー シ ョ ン ・ ス ト ラ テ ジ ー が 使 え る か に 重 点 を 置 い て い ま す 。 文 化 の 仲 介 プ ロ セ ス は 肯 定 的 な 行 為 だ け で は な
+く 、 時 に は 異 文 化 間 コ ン フ リ ク ト と い う 形 で 表 れ 、 そ れ は 個 人 の ア イ デ ン テ ィ テ ィ や 性 格 に 深 い 影 響 を 及 ぼ す 可 能 性 も あ り ま す 。 何 か ト ラ ブ ル
+が 起 き た と き 、 ど の よ う に 考 え 、 対 処 し て い っ た ら い い の で し ょ う か 。
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+①. Introduction
+
+It is often said that learning a language is learning a culture. Learning a foreign language affects an individual's identity, allows them to think about things from multiple angles, and helps them communicate.
+By cultivating communication skills, multilingual and multicultural skills, and enriching each individual's ``my own language and my own culture.''
+In this article, we will introduce a class activity in which students express their opinions in Japanese through the video ``Express Japanese'' (20228). ``Play Japanese'' is
+From the perspective of a Japanese language learner, we will take up the concept of ``mediation'' that connects one's own language and culture with Japan, and interpret it when standing between different cultures. problem
+The focus is on what communication strategies can be used to solve problems. Cultural mediation processes are not just about positive actions.
+This is often manifested in the form of intercultural conflict, which can have a profound impact on an individual's identity and personality. some trouble
+How do you think and deal with it when it happens?
+
+============================================================

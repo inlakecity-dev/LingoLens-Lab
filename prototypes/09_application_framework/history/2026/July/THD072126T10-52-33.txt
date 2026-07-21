@@ -1,0 +1,31 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 21 July 2026
+Time            : 10:52:33
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+अक्सर कहा जाता है कि महिलाएं पुरुषों की तुलना में अधिक धार्मिक होती हैं, लेकिन अब ये
+धारणा बदल रही है। गैलप के 2024-25 के विश्लेषण के अनुसार, अमेरिका के 42% युवा
+पुरुषों ने धर्म को जीवन में ‘aga महत्वपूर्ण' बताया, जबकि दो साल पहले आंकड़ा 28% था।
+इसी अवधि में युवा महिलाओं का प्रतिशत 29% रहा, यानी पहली बार पुरुष महिलाओं से आगे
+रहे।
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+It is often said that women are more religious than men, but now this
+Perception is changing. According to Gallup's 2024-25 analysis, 42% of America's youth
+Men rated religion as 'again important' in life, compared to 28% two years ago.
+In the same period, the percentage of young women was 29%, i.e. for the first time men are ahead of women.
+Stay.
+
+============================================================

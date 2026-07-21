@@ -5,7 +5,6 @@ Shared utility functions used throughout the application.
 """
 
 import os
-import tkinter as tk
 import config
 
 

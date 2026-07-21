@@ -7,13 +7,13 @@ from images using Tesseract OCR.
 
 import pytesseract
 
-from config import TESSERACT_PATH
+from config import TESSERACT_PATH, OCR_LANGUAGES
 
 # Configure Tesseract executable
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
 
-def extract_text(image, languages=None):
+def extract_text(image, languages=OCR_LANGUAGES):
     """
     Extract text from a PIL Image.
 
@@ -21,19 +21,15 @@ def extract_text(image, languages=None):
         image (PIL.Image):
             Image to process.
 
-        languages (str, optional):
+        languages (str):
             Tesseract language codes separated by '+'.
-            If None, Tesseract will use its default language.
 
     Returns:
         str:
             Extracted text.
     """
 
-    if languages:
-        return pytesseract.image_to_string(
-            image,
-            lang=languages
-        )
-
-    return pytesseract.image_to_string(image)
+    return pytesseract.image_to_string(
+        image,
+        lang=languages
+    )

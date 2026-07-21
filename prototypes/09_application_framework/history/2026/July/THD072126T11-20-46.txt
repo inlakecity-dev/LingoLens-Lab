@@ -1,0 +1,35 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 21 July 2026
+Time            : 11:20:46
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+धर्म को अपनी पहचान से जोड़ रहे युवा पुरुष
+
+गैलप के विश्लेषण में अमेरिका में धार्मिकता बढ़ने का बड़ा बदलाव रिपब्लिकन विचारधारा वाले
+युवा पुरुषों में दिखा। यूनिवर्सिटी ऑफ नोट्रे डेम के प्रोफेसर डेविड कैंपबेल के मुताबिक हाल के
+वर्षों में युवा पुरुषों में रिपब्लिकन पहचान मजबूत हुई है। कई लोग धर्म को अपनी राजनीतिक व
+वैचारिक पहचान का हिस्सा मानने लगे हैं। इसी वजह से धर्म और राजनीति दोनों का प्रभाव पड़ा
+है।
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+Young men linking religion to their identity
+
+According to Gallup's analysis, the biggest change in increasing religiosity in America is among Republican ideologues.
+Seen in young men. According to University of Notre Dame professor David Campbell, recent
+Republican identification among young men has strengthened over the years. Many people use religion for their political purposes.
+Have started considering it as part of ideological identity. For this reason both religion and politics had an impact
+Is.
+
+============================================================
