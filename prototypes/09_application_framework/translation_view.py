@@ -11,9 +11,12 @@ Responsibilities:
 
 No OCR, translation, or history logic belongs here.
 """
-import config
+
 import tkinter as tk
 from tkinter import ttk
+
+import config
+from theme import get_theme
 
 
 class TranslationView(ttk.Frame):
@@ -45,7 +48,9 @@ class TranslationView(ttk.Frame):
             width=40,
             height=10,
             font=("Nirmala UI", 12),
-            wrap="word"
+            wrap="word",
+            relief="solid",
+            borderwidth=1
         )
 
         self.original_text.grid(
@@ -71,7 +76,10 @@ class TranslationView(ttk.Frame):
         self.translation_text = tk.Text(
             self,
             height=8,
-            wrap="word"
+            font=("Nirmala UI", 12),
+            wrap="word",
+            relief="solid",
+            borderwidth=1
         )
 
         self.translation_text.grid(
@@ -79,6 +87,30 @@ class TranslationView(ttk.Frame):
             column=0,
             sticky="nsew"
         )
+
+        # Apply current theme
+        self.apply_theme()
+
+    # --------------------------------------------------
+    # Theme
+    # --------------------------------------------------
+
+    def apply_theme(self):
+
+        theme = get_theme()
+
+        text_options = {
+            "bg": theme["surface"],
+            "fg": theme["text"],
+            "insertbackground": theme["text"],
+            "selectbackground": theme["accent"],
+            "selectforeground": "#FFFFFF",
+            "highlightbackground": theme["border"],
+            "highlightcolor": theme["accent"],
+        }
+
+        self.original_text.configure(**text_options)
+        self.translation_text.configure(**text_options)
 
     # --------------------------------------------------
     # PUBLIC METHODS

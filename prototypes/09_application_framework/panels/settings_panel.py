@@ -1,79 +1,46 @@
 """
-settings_window.py
+settings_panel.py
 
-Creates the Settings window.
+Settings flyout panel.
+
+Responsibilities:
+- Display translation settings
+- Update AppSettings
+- No window creation
 """
 
 import tkinter as tk
 from tkinter import ttk
 
 import config
-from helpers import center_window, set_window_icon
+from panels.base_panel import BasePanel
 
 
-class SettingsWindow:
+class SettingsPanel(BasePanel):
 
-    def __init__(
-        self,
-        root,
-        app_settings
-    ):
+    def __init__(self, parent, app_settings):
 
-        self.root = root
+        super().__init__(parent)
+
         self.app_settings = app_settings
-
-    def save_settings(self):
-
-        self.app_settings.source_language = (
-            self.source_language.get()
-        )
-
-        self.app_settings.target_language = (
-            self.target_language.get()
-        )
-
-        self.window.destroy()
-
-    def show(self):
-
-        self.window = tk.Toplevel(self.root)
-
-        set_window_icon(self.window)
-
-        self.window.title("LingoLens Settings")
-        self.window.resizable(False, False)
-
-        center_window(
-            self.window,
-            500,
-            350
-        )
-
-        content = ttk.Frame(
-            self.window,
-            padding=20
-        )
-
-        content.pack(
-            fill="both",
-            expand=True
-        )
 
         # --------------------------------------------------
         # Translation
         # --------------------------------------------------
 
         ttk.Label(
-            content,
+            self.content,
             text="Source Language"
-        ).pack(anchor="w")
+        ).pack(
+            anchor="w"
+        )
 
         self.source_language = tk.StringVar(
             value=self.app_settings.source_language
         )
 
         ttk.Combobox(
-            content,
+            self.content,
             textvariable=self.source_language,
             values=list(config.SOURCE_LANGUAGE_MAP.keys()),
             state="readonly",
@@ -84,31 +51,29 @@ class SettingsWindow:
         )
 
         ttk.Label(
-            content,
+            self.content,
             text="Target Language"
-        ).pack(anchor="w")
+        ).pack(
+            anchor="w"
+        )
 
         self.target_language = tk.StringVar(
             value=self.app_settings.target_language
         )
 
         ttk.Combobox(
-            content,
+            self.content,
             textvariable=self.target_language,
             values=list(config.TARGET_LANGUAGE_MAP.keys()),
             state="readonly",
             width=35
         ).pack(
             anchor="w",
-            pady=(5, 25)
+            pady=(5, 20)
         )
 
-        # --------------------------------------------------
-        # Separator
-        # --------------------------------------------------
-
         ttk.Separator(
-            content,
+            self.content,
             orient="horizontal"
         ).pack(
             fill="x",
@@ -119,7 +84,7 @@ class SettingsWindow:
         # Buttons
         # --------------------------------------------------
 
-        button_frame = ttk.Frame(content)
+        button_frame = ttk.Frame(self.content)
 
         button_frame.pack(
             anchor="e",
@@ -133,14 +98,26 @@ class SettingsWindow:
             command=self.save_settings
         ).pack(
             side="left",
-            padx=5
+            padx=(0, 5)
         )
 
         ttk.Button(
             button_frame,
             text="Cancel",
             width=12,
-            command=self.window.destroy
+            command=self.close
         ).pack(
             side="left"
         )
+
+    def save_settings(self):
+
+        self.app_settings.source_language = (
+            self.source_language.get()
+        )
+
+        self.app_settings.target_language = (
+            self.target_language.get()
+        )
+
+        self.close()

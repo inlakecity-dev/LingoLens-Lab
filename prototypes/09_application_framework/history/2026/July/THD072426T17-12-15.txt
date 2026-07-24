@@ -1,0 +1,63 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 24 July 2026
+Time            : 17:12:15
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+Text 2
+
+王 明 是 中 国 人 。
+
+( 王 明 是 中 国 人 。 )
+明 是 学 生 。
+
+( 王 明 是 学 生 。)
+
+史 密 斯 是 美 国 人 。
+
+( 史 密 斯 是 美 国 人 。 )
+史 密 斯 是 王 明 的 朋
+友 。
+
+( 史 密 斯 是 王 明 的 朋
+友 . )
+
+史 密 斯 是 律 师 。
+
+( 史 密 斯 是 律 师 。 )
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+Text 2
+
+Wang Ming is Chinese.
+
+(Wang Ming is Chinese.)
+Ming is a student.
+
+(Wang Ming is a student.)
+
+Smith is an American.
+
+(Smith is American.)
+Smith is Wang Ming’s friend
+friends.
+
+(Smith is Wang Ming’s friend
+friend .)
+
+Smith is a lawyer.
+
+(Smith is a lawyer.)
+
+============================================================

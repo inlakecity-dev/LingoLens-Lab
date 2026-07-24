@@ -11,138 +11,147 @@ from core.capture import capture_region
 from core.ocr import extract_text
 from core.translator import translate_text
 from core.history import save_translation
+
 from config import (
-    DEFAULT_SOURCE_LANGUAGE,
-    DEFAULT_TARGET_LANGUAGE,
-    OCR_LANGUAGES,
+    OCR_LANGUAGE_MAP,
+    SOURCE_LANGUAGE_MAP,
+    TARGET_LANGUAGE_MAP,
 )
 
 
-def translate_region(
-    x1,
-    y1,
-    x2,
-    y2,
-    source_language=DEFAULT_SOURCE_LANGUAGE,
-    target_language=DEFAULT_TARGET_LANGUAGE,
-):
+class Controller:
     """
-    Capture a screen region, extract text,
-    translate it and save the translation history.
-
-    Args:
-        x1, y1:
-            Top-left coordinates.
-
-        x2, y2:
-            Bottom-right coordinates.
-
-        source_language (str):
-            Source language.
-            Default: Auto Detect
-
-        target_language (str):
-            Target language.
-            Default: English
-
-    Returns:
-        dict:
-            {
-                "status": str,
-                "original": str,
-                "translation": str,
-                "history_file": pathlib.Path | None,
-                "ocr_language": str,
-                "source_language": str,
-                "target_language": str,
-            }
+    Coordinates the workflow between the UI
+    and the application core.
     """
 
-    total_start = time.perf_counter()
+    def __init__(self, app_settings):
 
-    # --------------------------------------------------
-    # Capture selected screen region
-    # --------------------------------------------------
+        self.app_settings = app_settings
 
-    start = time.perf_counter()
-
-    image = capture_region(
+    def translate_region(
+        self,
         x1,
         y1,
         x2,
         y2,
-    )
+    ):
+        """
+        Capture a screen region, extract text,
+        translate it and save the translation history.
+        """
 
-    print(f"Capture     : {time.perf_counter() - start:.3f} sec")
+        # ----------------------------------------------
+        # Read current settings
+        # ----------------------------------------------
 
-    # --------------------------------------------------
-    # Extract text from image
-    # --------------------------------------------------
+        source_language = SOURCE_LANGUAGE_MAP[
+            self.app_settings.source_language
+        ]
 
-    start = time.perf_counter()
+        target_language = TARGET_LANGUAGE_MAP[
+            self.app_settings.target_language
+        ]
 
-    original_text = extract_text(image)
+        ocr_languages = "+".join(
+            OCR_LANGUAGE_MAP[language]
+            for language in self.app_settings.enabled_ocr_languages
+        )
 
-    print(f"OCR         : {time.perf_counter() - start:.3f} sec")
+        total_start = time.perf_counter()
 
-    # Stop if no text was detected
+        # ----------------------------------------------
+        # Capture selected screen region
+        # ----------------------------------------------
 
-    if not original_text.strip():
+        start = time.perf_counter()
 
-        print(f"TOTAL       : {time.perf_counter() - total_start:.3f} sec\n")
+        image = capture_region(
+            x1,
+            y1,
+            x2,
+            y2,
+        )
+
+        print(
+            f"Capture     : {time.perf_counter() - start:.3f} sec"
+        )
+
+        # ----------------------------------------------
+        # OCR
+        # ----------------------------------------------
+
+        start = time.perf_counter()
+
+        original_text = extract_text(
+            image,
+            self.app_settings.enabled_ocr_languages
+        )
+
+        print(
+            f"OCR         : {time.perf_counter() - start:.3f} sec"
+        )
+
+        if not original_text.strip():
+
+            print(
+                f"TOTAL       : {time.perf_counter() - total_start:.3f} sec\n"
+            )
+
+            return {
+                "status": "no_text",
+                "original": "",
+                "translation": "",
+                "history_file": None,
+                "ocr_language": ocr_languages,
+                "source_language": source_language,
+                "target_language": target_language,
+            }
+
+        # ----------------------------------------------
+        # Translation
+        # ----------------------------------------------
+
+        start = time.perf_counter()
+
+        translated_text = translate_text(
+            original_text,
+            source_language,
+            target_language,
+        )
+
+        print(
+            f"Translation : {time.perf_counter() - start:.3f} sec"
+        )
+
+        # ----------------------------------------------
+        # Save History
+        # ----------------------------------------------
+
+        start = time.perf_counter()
+
+        history_file = save_translation(
+            original_text,
+            translated_text,
+            source_language,
+            target_language,
+        )
+
+        print(
+            f"History     : {time.perf_counter() - start:.3f} sec"
+        )
+
+        print("-" * 35)
+        print(
+            f"TOTAL       : {time.perf_counter() - total_start:.3f} sec\n"
+        )
 
         return {
-            "status": "no_text",
-            "original": "",
-            "translation": "",
-            "history_file": None,
-            "ocr_language": OCR_LANGUAGES,
+            "status": "success",
+            "original": original_text,
+            "translation": translated_text,
+            "history_file": history_file,
+            "ocr_language": ocr_languages,
             "source_language": source_language,
             "target_language": target_language,
         }
-
-    # --------------------------------------------------
-    # Translate extracted text
-    # --------------------------------------------------
-
-    start = time.perf_counter()
-
-    translated_text = translate_text(
-        original_text,
-        source_language,
-        target_language,
-    )
-
-    print(f"Translation : {time.perf_counter() - start:.3f} sec")
-
-    # --------------------------------------------------
-    # Save translation history
-    # --------------------------------------------------
-
-    start = time.perf_counter()
-
-    history_file = save_translation(
-        original_text,
-        translated_text,
-        source_language,
-        target_language,
-    )
-
-    print(f"History     : {time.perf_counter() - start:.3f} sec")
-
-    print("-" * 35)
-    print(f"TOTAL       : {time.perf_counter() - total_start:.3f} sec\n")
-
-    # --------------------------------------------------
-    # Return results
-    # --------------------------------------------------
-
-    return {
-        "status": "success",
-        "original": original_text,
-        "translation": translated_text,
-        "history_file": history_file,
-        "ocr_language": OCR_LANGUAGES,
-        "source_language": source_language,
-        "target_language": target_language,
-    }

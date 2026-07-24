@@ -1,12 +1,12 @@
 """
 Application Configuration
 """
+
 # ==========================================================
 # Application Information
 # ==========================================================
 
 APP_NAME = "LingoLens"
-
 
 VERSION = "0.9"
 
@@ -30,7 +30,7 @@ APP_ICON = "assets/branding/LingoLens_Icon.ico"
 FONT = ("Nirmala UI", 11)
 
 # ==========================================================
-# # Tesseract OCR executable path
+# Tesseract OCR executable path
 # ==========================================================
 
 TESSERACT_PATH = (
@@ -41,18 +41,44 @@ TESSERACT_PATH = (
 # OCR Configuration
 # ==========================================================
 
-OCR_LANGUAGES = "hin+jpn+eng+chi_sim"
+OCR_LANGUAGE_MAP = {
+    "English": "eng",
+    "Hindi": "hin",
+    "Japanese": "jpn",
+    "Chinese": "chi_sim",
+}
+
+DEFAULT_OCR_LANGUAGES = [
+    "English",
+    "Hindi",
+    "Japanese",
+    "Chinese",
+]
 
 # ==========================================================
-# Translation Configuration
+# Translation Languages
 # ==========================================================
 
-DEFAULT_SOURCE_LANGUAGE = "auto"
-DEFAULT_TARGET_LANGUAGE = "en"
+SOURCE_LANGUAGE_MAP = {
+    "Auto Detect": "auto",
+    "English": "en",
+    "Hindi": "hi",
+    "Japanese": "ja",
+    "Chinese": "zh-CN",
+}
+
+TARGET_LANGUAGE_MAP = {
+    "English": "en",
+    "Hindi": "hi",
+    "Japanese": "ja",
+    "Chinese": "zh-CN",
+}
+
+DEFAULT_SOURCE_LANGUAGE = "Auto Detect"
+DEFAULT_TARGET_LANGUAGE = "English"
 
 # ==========================================================
 # History Configuration
 # ==========================================================
 
 HISTORY_FOLDER = "history"
-

@@ -1,0 +1,45 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 24 July 2026
+Time            : 17:19:34
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+楽 し く ク イ ズ や ゲ ー ム
+
+国 際 交 流 基 金 ヤ ン ゴ ン 日 本 文 化 セ ン タ ー で は ② か 月 に ① 回 、 国 際 交 流 基 金 が 作 成 し て い る 日 本 語 学 習 コ ン テ ン ツ を 活 用
+な ど を 行 う ` ワ ク ワ ク 日 本 語 」 と い う イ ベ ン ト を 行 っ て い ま す 。 対 象 は 、JLPT ( 日 本 語 能 力 試 験 ) の N⑤/N④/N③ レ ベ ル を 勉 強 し て い る ミ ャ ン マ ー
+
+今 回 は ` ひ き だ す に ほ ん ご 」 の ③ つ の コ ー ナ ー を 紹 介 し な が ら そ れ に 基 づ い た ゲ ー ム を す る こ と で 参 加 者 同 士 が 仲 良 く な り 、 日
+
+人 の 学 習 者 で
+本 語 の 上 達 を 目 指 す イ ベ ン ト を 行 い ま し た 。
+参 加 者 : ③0 名 日 本 語 学 習 者
+
+時 間 : 約 ① 時 間 半
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+Fun quizzes and games
+
+The International Exchange Foundation Yangon Japanese Culture Center utilizes Japanese language learning content created by the International Exchange Foundation ① times every ② months.
+We are holding an event called ``Waku Waku Japanese'' where we will do things like ``Waku Waku Japanese''. The target audience is Myanmar who are studying JLPT (Japanese Language Proficiency Test) N⑤/N④/N③ level.
+
+This time, I would like to introduce three corners of ``Learn Japanese'', and by playing games based on them, the participants become friends with each other and spend the day together.
+
+human learner
+We held an event aimed at improving Japanese language skills.
+Participants: ③0 Japanese language learners
+
+Time: Approximately ① hours and a half
+
+============================================================

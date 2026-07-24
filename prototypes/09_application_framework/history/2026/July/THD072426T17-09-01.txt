@@ -1,0 +1,37 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 24 July 2026
+Time            : 17:09:01
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+तीन दिनों से यमुना का पानी बढ़ रहा
+
+यमुना का जल स्तर बढ़ने से अब तटीय इलाकों के लोगों की चिंता बढ़ने लगी है। 23 जुलाई की सुबह
+यमुना का जलस्तर 73.73 मीटर पर था जो रात में बढ़कर 73.80 पहुंच गया। वहीं गंगा का जलस्तर
+77.67 मीटर था जो रात में 77.63 मीटर पर आ गया। यमुना का जलस्तर दो मीटर और बढ़ने पर कई
+मुहल्लों तथा गांवों की स्थिति खराब होने लगेगी। तब लोगों को घर तक छोड़ना पड़ सकता है। पहाड़ों
+पर हो रही बारिश का असर यमुना के जलस्तर पर पड़ रहा है। पिछले तीन दिनों में इस नदी का पानी
+धीरे-धीरे बढ़ रहा है। इस नदी में अभी और पानी आएगा, जिससे जलस्तर बढ़ने की संभावना है।
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+Yamuna water has been rising for three days
+
+Due to the rise in the water level of Yamuna, the concern of the people of coastal areas has started increasing. morning of 23rd july
+The water level of Yamuna was at 73.73 meters which increased to 73.80 meters at night. The water level of Ganga
+It was 77.67 meters which came down to 77.63 meters at night. If the water level of Yamuna rises two more meters, many
+The condition of localities and villages will start deteriorating. Then people may have to leave their homes. the mountains
+But the rains are affecting the water level of Yamuna. The water of this river in the last three days
+Slowly increasing. More water will come into this river, due to which the water level is likely to increase.
+
+============================================================
