@@ -107,7 +107,10 @@ class MenuBar:
 
     def create_lens_menu(self):
 
-        lens_menu = tk.Menu(self.menu_bar, tearoff=0)
+        lens_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
         lens_menu.add_checkbutton(
             label="Live Translation",
@@ -119,10 +122,7 @@ class MenuBar:
 
         lens_menu.add_command(
             label="Open Floating Lens",
-            command=lambda: self.menu_action(
-                "LENS",
-                "Open Floating Lens selected"
-            )
+            command=self.open_floating_lens
         )
 
         lens_menu.add_command(
@@ -137,6 +137,20 @@ class MenuBar:
             label="Lens",
             menu=lens_menu
         )
+
+
+    # --------------------------------------------------
+    # Lens Commands
+    # --------------------------------------------------
+
+    def open_floating_lens(self):
+
+        self.menu_action(
+            "LENS",
+            "Open Floating Lens selected"
+        )
+
+        self.controller.toggle_floating_lens()
 
     # --------------------------------------------------
     # TRANSLATE MENU
@@ -300,18 +314,12 @@ class MenuBar:
 
         tools_menu.add_command(
             label="History",
-            command=lambda: self.menu_action(
-                "TOOLS",
-                "History selected"
-            )
+            command=self.controller.show_history
         )
 
         tools_menu.add_command(
             label="Log Viewer",
-            command=lambda: self.menu_action(
-                "TOOLS",
-                "Log Viewer selected"
-            )
+            command=self.controller.show_log_viewer
         )
 
         self.menu_bar.add_cascade(

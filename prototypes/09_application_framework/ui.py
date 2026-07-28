@@ -11,11 +11,13 @@ from menu import MenuBar
 from statusbar import StatusBar
 from about import AboutWindow
 from controller import Controller
+from core.lens_controller import LensController
 from core.region_selector import select_region
 from core.display import enable_dpi_awareness
 from translation_view import TranslationView
 from app_settings import AppSettings
 from theme import apply_theme
+from floating_lens import FloatingLensWindow
 
 
 class MainWindow:
@@ -45,6 +47,24 @@ class MainWindow:
 
         self.controller = Controller(
             self.app_settings
+        )
+
+        # --------------------------------------------------
+        # Floating Lens Backend
+        # --------------------------------------------------
+
+        self.lens_controller = LensController(
+            self.controller
+        )
+
+        # --------------------------------------------------
+        # Floating Lens
+        # --------------------------------------------------
+
+        self.floating_lens = FloatingLensWindow(
+            self.root,
+            self.app_settings,
+            self.lens_controller
         )
 
         # --------------------------------------------------
@@ -121,6 +141,26 @@ class MainWindow:
         AboutWindow(
             self.root
         ).show()
+
+    def show_history(self):
+
+        self.controller.show_history()
+
+    def show_log_viewer(self):
+
+        self.controller.show_log_viewer()
+
+    def show_floating_lens(self):
+
+        self.floating_lens.show()
+
+    def hide_floating_lens(self):
+
+        self.floating_lens.hide()
+
+    def toggle_floating_lens(self):
+
+        self.floating_lens.toggle()
 
     # --------------------------------------------------
     # Translation

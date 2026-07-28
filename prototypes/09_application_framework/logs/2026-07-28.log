@@ -1,0 +1,68 @@
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-28 09:44:44
+============================================================
+2026-07-28 09:44:44 | INFO    | [APP] Application Started
+2026-07-28 09:44:58 | INFO    | [LENS] Open Floating Lens selected
+2026-07-28 10:13:02 | INFO    | [LENS] Live Translation Enabled
+2026-07-28 10:13:04 | INFO    | [LENS] Open Floating Lens selected
+2026-07-28 10:13:08 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-28 10:13:08
+Duration        : 0:28:23.699828
+============================================================
+2026-07-28 10:43:54 | INFO    | [LensCapture] Capturing region (100, 100) 400x200
+2026-07-28 10:43:54 | INFO    | [LensCapture] Capture completed (400x200)
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-28 11:32:55
+============================================================
+2026-07-28 11:32:55 | INFO    | [APP] Application Started
+2026-07-28 11:33:09 | INFO    | [LENS] Open Floating Lens selected
+2026-07-28 11:35:34 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-28 11:35:34
+Duration        : 0:02:38.935263
+============================================================
+2026-07-28 11:45:12 | INFO    | [LensCapture] Capturing region (100, 100) 400x200
+2026-07-28 11:45:12 | INFO    | [LensCapture] Capture completed (400x200)
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-28 11:57:46
+============================================================
+2026-07-28 11:57:46 | INFO    | [APP] Application Started
+2026-07-28 11:57:48 | INFO    | [LensWorkspace] Workspace initialized.
+2026-07-28 11:57:48 | INFO    | [LensController] Lens controller initialized.
+============================================================
+Session Ended   : 2026-07-28 11:57:48
+Duration        : 0:00:02.281284
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-28 11:59:24
+============================================================
+2026-07-28 11:59:24 | INFO    | [APP] Application Started
+2026-07-28 11:59:24 | INFO    | [LensWorkspace] Workspace initialized.
+2026-07-28 11:59:24 | INFO    | [LensController] Lens controller initialized.
+============================================================
+Session Ended   : 2026-07-28 11:59:24
+Duration        : 0:00:00.186528
+============================================================
+
+============================================================
+LingoLens v0.9
+Session Started : 2026-07-28 12:00:50
+============================================================
+2026-07-28 12:00:50 | INFO    | [APP] Application Started
+2026-07-28 12:00:50 | INFO    | [LensWorkspace] Workspace initialized.
+2026-07-28 12:00:50 | INFO    | [LensController] Lens controller initialized.
+2026-07-28 12:00:57 | INFO    | [LENS] Open Floating Lens selected
+2026-07-28 12:01:26 | INFO    | [APP] Application Closed
+============================================================
+Session Ended   : 2026-07-28 12:01:26
+Duration        : 0:00:35.993694
+============================================================
