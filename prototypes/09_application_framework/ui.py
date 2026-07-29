@@ -58,16 +58,6 @@ class MainWindow:
         )
 
         # --------------------------------------------------
-        # Floating Lens
-        # --------------------------------------------------
-
-        self.floating_lens = FloatingLensWindow(
-            self.root,
-            self.app_settings,
-            self.lens_controller
-        )
-
-        # --------------------------------------------------
         # Menu
         # --------------------------------------------------
 
@@ -112,6 +102,17 @@ class MainWindow:
             row=0,
             column=0,
             sticky="nsew"
+        )
+        
+        # --------------------------------------------------
+        # Floating Lens
+        # --------------------------------------------------
+
+        self.floating_lens = FloatingLensWindow(
+            self.root,
+            self.app_settings,
+            self.lens_controller,
+            self.translation_view,
         )
 
         # --------------------------------------------------

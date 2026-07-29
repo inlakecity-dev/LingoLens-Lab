@@ -7,7 +7,7 @@ Coordinates the Floating Lens workflow.
 
 Responsibilities
 ----------------
-- Capture a snapshot.
+- Capture a workspace region.
 - Store the captured image in the workspace.
 - Process the image using the shared Controller.
 - Store the processing result.
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from core.lens_capture import LensCapture
+from core.capture import capture_region
 from core.lens_workspace import LensWorkspace
 
 if TYPE_CHECKING:
@@ -50,12 +50,47 @@ class LensController:
 
         self.controller = controller
 
-        self.capture_service = LensCapture()
         self.workspace = LensWorkspace()
+
+        self.running = False
 
         logger.info(
             self.MODULE,
             "Lens controller initialized."
+        )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """
+        Start the Floating Lens backend.
+        """
+
+        if self.running:
+            return
+
+        self.running = True
+
+        logger.info(
+            self.MODULE,
+            "Lens backend started."
+        )
+
+    def stop(self) -> None:
+        """
+        Stop the Floating Lens backend.
+        """
+
+        if not self.running:
+            return
+
+        self.running = False
+
+        logger.info(
+            self.MODULE,
+            "Lens backend stopped."
         )
 
     # ------------------------------------------------------------------
@@ -79,6 +114,52 @@ class LensController:
         logger.info(
             self.MODULE,
             "Workspace cleared."
+        )
+
+    # ------------------------------------------------------------------
+    # Workspace Capture
+    # ------------------------------------------------------------------
+
+    def capture_workspace(
+        self,
+        left: int,
+        top: int,
+        width: int,
+        height: int,
+    ) -> dict[str, Any]:
+        """
+        Capture and process the current workspace region.
+
+        Parameters
+        ----------
+        left : int
+            Left screen coordinate.
+
+        top : int
+            Top screen coordinate.
+
+        width : int
+            Capture width.
+
+        height : int
+            Capture height.
+
+        Returns
+        -------
+        dict
+            Processing result returned by Controller.process_image().
+        """
+
+        logger.info(
+            self.MODULE,
+            "Capturing workspace."
+        )
+
+        return self.capture_snapshot(
+            left,
+            top,
+            width,
+            height,
         )
 
     # ------------------------------------------------------------------
@@ -120,16 +201,18 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        image = self.capture_service.capture(
+        image = capture_region(
             left,
             top,
-            width,
-            height,
+            left + width,
+            top + height,
         )
 
         self.workspace.set_image(image)
 
-        result = self.controller.process_image(image)
+        result = self.controller.process_image(
+            image
+        )
 
         self.workspace.set_result(result)
 

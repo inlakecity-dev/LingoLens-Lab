@@ -1,27 +1,63 @@
-from PIL import ImageGrab
+"""
+core/capture.py
+
+Capture Engine
+
+Responsible for capturing images from the Windows desktop.
+
+Responsibilities
+----------------
+- Capture the entire desktop.
+- Capture a rectangular desktop region.
+
+This module contains no OCR, Translation or UI logic.
+"""
+
+from PIL import Image, ImageGrab
 
 
-def capture_fullscreen():
+def capture_fullscreen() -> Image.Image:
     """
-    Capture the entire screen.
+    Capture the entire Windows desktop.
 
-    Returns:
-        PIL.Image: Screenshot of the full screen.
+    Returns
+    -------
+    PIL.Image.Image
+        Full desktop screenshot.
     """
+
     return ImageGrab.grab()
 
 
-def capture_region(x1, y1, x2, y2):
+def capture_region(
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+) -> Image.Image:
     """
-    Capture a selected screen region.
+    Capture a rectangular desktop region.
 
-    Args:
-        x1, y1: Top-left coordinates.
-        x2, y2: Bottom-right coordinates.
+    Parameters
+    ----------
+    left : int
+        Left desktop coordinate.
 
-    Returns:
-        PIL.Image: Screenshot of the selected region.
+    top : int
+        Top desktop coordinate.
+
+    right : int
+        Right desktop coordinate.
+
+    bottom : int
+        Bottom desktop coordinate.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Captured image.
     """
+
     return ImageGrab.grab(
-        bbox=(x1, y1, x2, y2)
+        bbox=(left, top, right, bottom)
     )

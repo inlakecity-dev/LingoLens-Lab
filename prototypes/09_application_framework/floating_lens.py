@@ -25,10 +25,13 @@ class FloatingLensWindow:
         parent,
         app_settings,
         lens_controller,
+        translation_view=None,
     ):
 
         self.parent = parent
         self.app_settings = app_settings
+        self.lens_controller = lens_controller
+        self.translation_view = translation_view
 
         self.window = None
 
@@ -41,7 +44,7 @@ class FloatingLensWindow:
         register_widget(self)
 
         self.apply_theme()
-        self.lens_controller = lens_controller
+        
 
     # --------------------------------------------------
     # Window
@@ -149,26 +152,37 @@ class FloatingLensWindow:
         # Status Bar
         #
 
+
         self.status_bar = tk.Frame(
-            self.window,
-            height=24
+        self.window,
+        height=24
         )
 
         self.status_bar.pack(
-            fill="x",
-            side="bottom"
+        fill="x",
+        side="bottom"
+        )
+
+        self.status_indicator = tk.Label(
+        self.status_bar,
+        text="●",
+        font=("Segoe UI", 10)
+        )
+
+        self.status_indicator.pack(
+        side="left",
+        padx=(8, 4)
         )
 
         self.status_label = tk.Label(
-            self.status_bar,
-            text="Ready",
-            anchor="w",
-            padx=8,
-            font=("Segoe UI", 9)
+        self.status_bar,
+        text="Ready to Capture",
+        anchor="w",
+        font=("Segoe UI", 9)
         )
 
         self.status_label.pack(
-            fill="x"
+        side="left"
         )
 
         #
@@ -200,10 +214,46 @@ class FloatingLensWindow:
     # --------------------------------------------------
 
     def show(self):
+        """
+        Display the Floating Lens and perform the
+        initial workspace capture.
+        """
 
         self.window.deiconify()
+        
+        self.window.update_idletasks()
+
+        self.lens_controller.start()
+
+        self.set_status(
+            "Capturing...",
+            "orange",
+        )
+
+        left, top, width, height = self.get_capture_region()
+
+        result = self.lens_controller.capture_workspace(
+            left,
+            top,
+            width,
+            height,
+        )
+        
+        if self.translation_view is not None:
+            self.translation_view.update(result)
+
+        self.set_translation(
+            result["translation"]
+        )
+
+        self.set_status(
+            "Translation Complete",
+            "green",
+        )
 
     def hide(self):
+        
+        self.lens_controller.stop()
 
         self.window.withdraw()
 
@@ -247,10 +297,15 @@ class FloatingLensWindow:
     def set_status(
         self,
         status,
+        color="green",
     ):
 
         self.status_label.config(
             text=status
+        )
+
+        self.status_indicator.config(
+            fg=color
         )
 
     # --------------------------------------------------
@@ -285,6 +340,31 @@ class FloatingLensWindow:
         self.window.geometry(
             f"+{x}+{y}"
         )
+        
+        
+    # --------------------------------------------------
+    # Capture Region
+    # --------------------------------------------------
+
+    def get_capture_region(self) -> tuple[int, int, int, int]:
+        """
+        Return the screen region occupied by the translation viewport.
+
+        Returns
+        -------
+        tuple
+            (left, top, width, height)
+        """
+
+        self.window.update_idletasks()
+
+        left = self.content.winfo_rootx()
+        top = self.content.winfo_rooty()
+
+        width = self.content.winfo_width()
+        height = self.content.winfo_height()
+
+        return left, top, width, height    
 
     # --------------------------------------------------
     # Theme
@@ -334,6 +414,10 @@ class FloatingLensWindow:
         self.status_label.configure(
             bg="#202020",
             fg="#DDDDDD"
+        )
+        self.status_indicator.configure(
+            bg="#202020",
+            fg="green"
         )
 
     # --------------------------------------------------
