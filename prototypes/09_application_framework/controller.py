@@ -8,10 +8,11 @@ and the application core.
 import time
 from tkinter import messagebox
 
-from core.capture import capture_region
+from core.capture_engine import capture_region
 from core.ocr import extract_text
 from core.translator import translate_text
 from core.history import save_translation
+from core.translation_map import TranslationMap
 
 from logger import logger
 
@@ -31,6 +32,9 @@ class Controller:
     def __init__(self, app_settings):
 
         self.app_settings = app_settings
+
+        # Central application Translation Map
+        self.translation_map = TranslationMap()
 
     # --------------------------------------------------
     # IMAGE PROCESSING PIPELINE
@@ -182,7 +186,7 @@ class Controller:
 
         start = time.perf_counter()
 
-        image = capture_region(
+        region = capture_region(
             x1,
             y1,
             x2,
@@ -199,11 +203,24 @@ class Controller:
         # Process Image
         # ----------------------------------------------
 
-        result = self.process_image(image)
+        result = self.process_image(region.image)
+        if result["status"] == "success":
+            self.translation_map.add_entry(
+                region.bounds,
+                result["original"],
+                result["translation"],
+            )
 
         result["capture_time"] = capture_time
 
         return result
+        
+    def get_translation_map(self):
+        """
+        Return the application's Translation Map.
+        """
+
+        return self.translation_map
 
     # ----------------------------------------------
     # TOOLS

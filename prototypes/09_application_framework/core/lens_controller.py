@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from core.capture import capture_region
+from core.capture_engine import capture_region
 from core.lens_workspace import LensWorkspace
 
 if TYPE_CHECKING:
@@ -201,19 +201,22 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        image = capture_region(
+        region = capture_region(
             left,
             top,
             left + width,
             top + height,
         )
 
-        self.workspace.set_image(image)
+        # Store captured image in the workspace
+        self.workspace.set_image(region.image)
 
+        # Process the captured image
         result = self.controller.process_image(
-            image
+            region.image
         )
 
+        # Store processing result
         self.workspace.set_result(result)
 
         logger.info(
