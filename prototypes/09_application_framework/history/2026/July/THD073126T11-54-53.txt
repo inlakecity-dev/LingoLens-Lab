@@ -1,0 +1,31 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 31 July 2026
+Time            : 11:54:53
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+* `JF 日 本 語 教 肉 ス タ ン ダ ー ド [ ス 」( 別 サ イ ト へ 移 動 し ま す ) は 、 ヨ ー ロ ッ パ 言 語 共 通 参 照 枠 (CEFR) の 考 え 方 に 基 づ い て JF が 開 発 し た 、 日 本 語 の 学 び 方 、 教 え 方 、 評 価 の 仕 方
+を 考 え る た め の 枠 組 み で す 。 日 本 語 の レ ベ ル を A① 一 C② の ⑥ 段 階 で 表 し て い ま す 。
+
+炉 例 え ば ぼ 、 わ か ら な い 言 葉 が あ る と き に 聞 き 返 す 、 う ま く 発 言 権 を と と っ て 会 話 に 参 加 す る 、 な ど の 行 為 で す 。 本 番 組 は ` ス ト ラ テ ジ ー」 を 軸 に 、 日 本 語 で の コ ミ ュ ニ ケ ー シ ョ ン カ
+の 向 上 を 図 る 新 し い ア プ ロ ー チ の 語 学 番 組 で す 。
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+* `JF Japanese Language Standards' (moves to another site) is a Japanese language learning standard developed by JF based on the concept of the Common European Framework of Reference for Languages (CEFR). methods, teaching methods, and evaluation methods
+It is a framework for thinking about things. The level of Japanese is expressed in stages from A① to C② and ⑥.
+
+For example, when someone says something you don't understand, you ask them back, or take the right to speak and participate in a conversation. This program focuses on ``Strategy'' and includes communication in Japanese.
+This is a language program that uses a new approach to improve your language skills.
+
+============================================================

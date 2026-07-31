@@ -25,13 +25,11 @@ class FloatingLensWindow:
         parent,
         app_settings,
         lens_controller,
-        translation_view=None,
     ):
 
         self.parent = parent
         self.app_settings = app_settings
         self.lens_controller = lens_controller
-        self.translation_view = translation_view
 
         self.window = None
 
@@ -44,7 +42,6 @@ class FloatingLensWindow:
         register_widget(self)
 
         self.apply_theme()
-        
 
     # --------------------------------------------------
     # Window
@@ -152,37 +149,36 @@ class FloatingLensWindow:
         # Status Bar
         #
 
-
         self.status_bar = tk.Frame(
-        self.window,
-        height=24
+            self.window,
+            height=24
         )
 
         self.status_bar.pack(
-        fill="x",
-        side="bottom"
+            fill="x",
+            side="bottom"
         )
 
         self.status_indicator = tk.Label(
-        self.status_bar,
-        text="●",
-        font=("Segoe UI", 10)
+            self.status_bar,
+            text="●",
+            font=("Segoe UI", 10)
         )
 
         self.status_indicator.pack(
-        side="left",
-        padx=(8, 4)
+            side="left",
+            padx=(8, 4)
         )
 
         self.status_label = tk.Label(
-        self.status_bar,
-        text="Ready to Capture",
-        anchor="w",
-        font=("Segoe UI", 9)
+            self.status_bar,
+            text="Ready to Capture",
+            anchor="w",
+            font=("Segoe UI", 9)
         )
 
         self.status_label.pack(
-        side="left"
+            side="left"
         )
 
         #
@@ -208,7 +204,7 @@ class FloatingLensWindow:
             "<B1-Motion>",
             self.on_move
         )
-        
+
     # --------------------------------------------------
     # Window Controls
     # --------------------------------------------------
@@ -220,7 +216,7 @@ class FloatingLensWindow:
         """
 
         self.window.deiconify()
-        
+
         self.window.update_idletasks()
 
         self.lens_controller.start()
@@ -232,18 +228,17 @@ class FloatingLensWindow:
 
         left, top, width, height = self.get_capture_region()
 
-        result = self.lens_controller.capture_workspace(
+        snapshot = self.lens_controller.capture_workspace(
             left,
             top,
             width,
             height,
         )
-        
-        if self.translation_view is not None:
-            self.translation_view.update(result)
+
+        result = snapshot["result"]
 
         self.set_translation(
-            result["translation"]
+            result.get("translation", "")
         )
 
         self.set_status(
@@ -252,7 +247,7 @@ class FloatingLensWindow:
         )
 
     def hide(self):
-        
+
         self.lens_controller.stop()
 
         self.window.withdraw()
@@ -340,8 +335,7 @@ class FloatingLensWindow:
         self.window.geometry(
             f"+{x}+{y}"
         )
-        
-        
+
     # --------------------------------------------------
     # Capture Region
     # --------------------------------------------------
@@ -364,19 +358,13 @@ class FloatingLensWindow:
         width = self.content.winfo_width()
         height = self.content.winfo_height()
 
-        return left, top, width, height    
+        return left, top, width, height
 
     # --------------------------------------------------
     # Theme
     # --------------------------------------------------
 
     def apply_theme(self):
-
-        #
-        # Temporary colors.
-        # We'll replace these with the
-        # application's theme manager later.
-        #
 
         self.window.configure(
             bg="#2B2B2B"
@@ -415,6 +403,7 @@ class FloatingLensWindow:
             bg="#202020",
             fg="#DDDDDD"
         )
+
         self.status_indicator.configure(
             bg="#202020",
             fg="green"

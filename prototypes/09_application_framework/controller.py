@@ -13,6 +13,7 @@ from core.ocr import extract_text
 from core.translator import translate_text
 from core.history import save_translation
 from core.translation_map import TranslationMap
+from core.desktop_observer import DesktopObserver
 
 from logger import logger
 
@@ -33,8 +34,15 @@ class Controller:
 
         self.app_settings = app_settings
 
+        # ----------------------------------------------
+        # Core Components
+        # ----------------------------------------------
+
         # Central application Translation Map
         self.translation_map = TranslationMap()
+
+        # Live Desktop Observer
+        self.desktop_observer = DesktopObserver(self)
 
     # --------------------------------------------------
     # IMAGE PROCESSING PIPELINE
@@ -166,7 +174,7 @@ class Controller:
             "history_time": history_time,
             "total_time": total_time,
         }
-        
+
     def translate_region(
         self,
         x1,
@@ -204,6 +212,7 @@ class Controller:
         # ----------------------------------------------
 
         result = self.process_image(region.image)
+
         if result["status"] == "success":
             self.translation_map.add_entry(
                 region.bounds,
@@ -214,13 +223,56 @@ class Controller:
         result["capture_time"] = capture_time
 
         return result
-        
+
     def get_translation_map(self):
         """
         Return the application's Translation Map.
         """
 
         return self.translation_map
+
+    # --------------------------------------------------
+    # LIVE MODE
+    # --------------------------------------------------
+
+    def start_live_mode(self):
+        """
+        Start the Desktop Observer.
+        """
+
+        self.desktop_observer.start()
+
+    def stop_live_mode(self):
+        """
+        Stop the Desktop Observer.
+        """
+
+        self.desktop_observer.stop()
+
+    def on_desktop_changed(
+        self,
+        dirty_regions,
+    ):
+        """
+        Called by the Desktop Observer whenever the
+        desktop changes.
+
+        This is the future entry point for the
+        Live Translation pipeline.
+        """
+
+        logger.info(
+            "Desktop changed (%d dirty region(s)).",
+            len(dirty_regions),
+        )
+
+        # Future pipeline:
+        #
+        # for region in dirty_regions:
+        #     capture
+        #     OCR
+        #     translate
+        #     update TranslationMap
 
     # ----------------------------------------------
     # TOOLS
@@ -248,4 +300,4 @@ class Controller:
         messagebox.showinfo(
             "Log Viewer",
             "Log Viewer will be implemented in the next phase."
-        )    
+        )

@@ -111,3 +111,31 @@ def capture_region(
         right=right,
         bottom=bottom,
     )
+
+
+def capture_bounds(
+    bounds: tuple[int, int, int, int],
+) -> CapturedRegion:
+    """
+    Capture a region using TranslationMap bounds.
+
+    Parameters
+    ----------
+    bounds : tuple
+        Region in the format:
+        (left, top, width, height)
+
+    Returns
+    -------
+    CapturedRegion
+        Captured desktop region.
+    """
+
+    left, top, width, height = bounds
+
+    return capture_region(
+        left,
+        top,
+        left + width,
+        top + height,
+    )

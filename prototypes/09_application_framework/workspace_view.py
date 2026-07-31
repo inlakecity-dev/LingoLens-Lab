@@ -3,11 +3,11 @@ workspace_view.py
 
 Developer Workspace Viewer.
 
-Displays the current workspace image,
+Displays the current captured region,
 OCR text and translated text.
 
 This is a development tool used to
-observe the shared workspace while
+observe the translation pipeline while
 building LingoLens.
 
 It performs NO capture, OCR or translation.
@@ -20,9 +20,12 @@ from PIL import ImageTk
 
 class WorkspaceView:
     """
-    Displays the shared workspace.
+    Developer viewer.
 
     Pure UI component.
+
+    Receives a CapturedRegion and a processing
+    result directly from the controller.
     """
 
     PREVIEW_SIZE = (320, 180)
@@ -121,13 +124,16 @@ class WorkspaceView:
 
         self.frame.pack(**kwargs)
 
-    def update_workspace(self, workspace):
+    def update_workspace(self, captured_region, result):
 
         #
         # Image
         #
 
-        image = workspace.get_image()
+        image = None
+
+        if captured_region is not None:
+            image = captured_region.image
 
         if image is not None:
 
@@ -145,21 +151,36 @@ class WorkspaceView:
                 image=self.photo,
                 text=""
             )
+        else:
+
+            self.image_label.configure(
+                image="",
+                text="No Image"
+            )
+
+            self.photo = None
 
         #
-        # Result
+        # OCR
         #
-
-        result = workspace.get_result()
-
-        if result is None:
-
-            return
 
         self.original_text.delete(
             "1.0",
             tk.END
         )
+
+        #
+        # Translation
+        #
+
+        self.translation_text.delete(
+            "1.0",
+            tk.END
+        )
+
+        if result is None:
+
+            return
 
         self.original_text.insert(
             tk.END,
@@ -167,11 +188,6 @@ class WorkspaceView:
                 "original",
                 ""
             )
-        )
-
-        self.translation_text.delete(
-            "1.0",
-            tk.END
         )
 
         self.translation_text.insert(

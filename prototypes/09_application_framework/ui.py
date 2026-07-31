@@ -103,7 +103,7 @@ class MainWindow:
             column=0,
             sticky="nsew"
         )
-        
+
         # --------------------------------------------------
         # Floating Lens
         # --------------------------------------------------
@@ -112,7 +112,6 @@ class MainWindow:
             self.root,
             self.app_settings,
             self.lens_controller,
-            self.translation_view,
         )
 
         # --------------------------------------------------

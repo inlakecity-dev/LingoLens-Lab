@@ -8,10 +8,8 @@ Coordinates the Floating Lens workflow.
 Responsibilities
 ----------------
 - Capture a workspace region.
-- Store the captured image in the workspace.
-- Process the image using the shared Controller.
-- Store the processing result.
-- Provide access to the workspace.
+- Process the captured image using the shared Controller.
+- Return the captured region and processing result.
 
 This controller contains no OCR, Translation,
 History or UI logic.
@@ -22,7 +20,6 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 from core.capture_engine import capture_region
-from core.lens_workspace import LensWorkspace
 
 if TYPE_CHECKING:
     from controller import Controller
@@ -49,8 +46,6 @@ class LensController:
         """
 
         self.controller = controller
-
-        self.workspace = LensWorkspace()
 
         self.running = False
 
@@ -94,29 +89,6 @@ class LensController:
         )
 
     # ------------------------------------------------------------------
-    # Workspace
-    # ------------------------------------------------------------------
-
-    def get_workspace(self) -> LensWorkspace:
-        """
-        Return the current workspace.
-        """
-
-        return self.workspace
-
-    def clear_workspace(self) -> None:
-        """
-        Clear the current workspace.
-        """
-
-        self.workspace.clear()
-
-        logger.info(
-            self.MODULE,
-            "Workspace cleared."
-        )
-
-    # ------------------------------------------------------------------
     # Workspace Capture
     # ------------------------------------------------------------------
 
@@ -147,7 +119,10 @@ class LensController:
         Returns
         -------
         dict
-            Processing result returned by Controller.process_image().
+            {
+                "captured_region": CapturedRegion,
+                "result": dict
+            }
         """
 
         logger.info(
@@ -193,7 +168,10 @@ class LensController:
         Returns
         -------
         dict
-            Processing result returned by Controller.process_image().
+            {
+                "captured_region": CapturedRegion,
+                "result": dict
+            }
         """
 
         logger.info(
@@ -201,27 +179,23 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        region = capture_region(
+        captured_region = capture_region(
             left,
             top,
             left + width,
             top + height,
         )
 
-        # Store captured image in the workspace
-        self.workspace.set_image(region.image)
-
-        # Process the captured image
         result = self.controller.process_image(
-            region.image
+            captured_region.image
         )
-
-        # Store processing result
-        self.workspace.set_result(result)
 
         logger.info(
             self.MODULE,
             "Snapshot processing completed."
         )
 
-        return result
+        return {
+            "captured_region": captured_region,
+            "result": result,
+        }
