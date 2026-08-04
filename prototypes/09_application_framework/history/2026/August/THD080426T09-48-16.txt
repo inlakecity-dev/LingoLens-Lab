@@ -1,0 +1,31 @@
+============================================================
+LingoLens Translation History
+============================================================
+
+Date            : 04 August 2026
+Time            : 09:48:16
+
+Source Language : auto
+Target Language : en
+
+------------------------------------------------------------
+Original Text
+------------------------------------------------------------
+
+生 や 社 会 人 ② 0 名 の ク ラ ス で す 。 受 講 者 は ひ ら が な と カ タ カ
+
+学 習 経 験 が あ る 、 日 本 語 ス タ ー ト レ ベ ル の 方 々 で す 。
+[ 日 本 語 に 出 会 う ・ 日 本 語 を 使 っ て み る 」 を コ ン セ プ ト に し た 日 本 語 ク ラ ス で は 、 ` 気 持 ち が 伝 わ る オ ノ マ ト ペ 」 を 使 用 し て 、 み な さ ん が な じ
+み や す い オ ノ マ ト ぺ を 取 り 入 れ た ア ク テ ィ ビ テ ィ を 実 施 し ま し た 。
+
+------------------------------------------------------------
+Translated Text
+------------------------------------------------------------
+
+This is a class of ②0 students and working adults. Students learn Hiragana and Kataka
+
+These are people who have some experience studying Japanese and are at the starting level.
+In the Japanese class, which is based on the concept of ``encountering the Japanese language and trying to use it,'' we use onomatopoeia that conveys feelings, so that everyone can learn the same thing.
+We conducted an activity that incorporated easy-to-understand onomatopoeia.
+
+============================================================
