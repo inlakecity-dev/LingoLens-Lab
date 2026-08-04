@@ -30,6 +30,8 @@ class FloatingLensWindow:
         self.parent = parent
         self.app_settings = app_settings
         self.lens_controller = lens_controller
+        
+        self.is_open = False
 
         self.window = None
 
@@ -214,10 +216,28 @@ class FloatingLensWindow:
         Display the Floating Lens and perform the
         initial workspace capture.
         """
+        
+        self.is_open = True
 
+        # Show once so geometry is calculated
         self.window.deiconify()
+        self.window.update()
+        
+        # Allow Windows to finish laying out the window.
+        self.window.after(50)
+        self.window.update()
+       
+       # Read the capture region
+        left, top, width, height = self.get_capture_region()
+        
+        print(
+            f"Capture Region: "
+            f"{left}, {top}, {width}, {height}"
+        )
 
-        self.window.update_idletasks()
+        # Hide the lens before capturing
+        self.window.withdraw()
+        self.window.update()
 
         self.lens_controller.start()
 
@@ -226,8 +246,6 @@ class FloatingLensWindow:
             "orange",
         )
 
-        left, top, width, height = self.get_capture_region()
-
         snapshot = self.lens_controller.capture_workspace(
             left,
             top,
@@ -235,6 +253,10 @@ class FloatingLensWindow:
             height,
         )
 
+        # Show again
+        self.window.deiconify()
+        self.window.update()
+        
         result = snapshot["result"]
 
         self.set_translation(
@@ -246,7 +268,11 @@ class FloatingLensWindow:
             "green",
         )
 
+        print("Translation:", result["translation"])
+
     def hide(self):
+        
+        self.is_open = False
 
         self.lens_controller.stop()
 
@@ -254,13 +280,10 @@ class FloatingLensWindow:
 
     def toggle(self):
 
-        if self.window.state() == "withdrawn":
-
-            self.show()
-
-        else:
-
+        if self.is_open:
             self.hide()
+        else:
+            self.show()
 
     def close(self):
 

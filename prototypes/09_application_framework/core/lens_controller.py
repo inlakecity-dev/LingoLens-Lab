@@ -176,16 +176,12 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        result = self.controller.capture_snapshot(
+        snapshot = self.controller.image_pipeline.capture_snapshot(
             left,
             top,
             width,
             height,
         )
 
-        logger.info(
-            self.MODULE,
-            "Snapshot processing completed."
-        )
-
-        return result
+        return snapshot
+        
