@@ -246,7 +246,8 @@ class FloatingLensWindow:
             "orange",
         )
 
-        snapshot = self.lens_controller.capture_workspace(
+        # Populate the TranslationMap
+        self.lens_controller.capture_workspace(
             left,
             top,
             width,
@@ -256,19 +257,33 @@ class FloatingLensWindow:
         # Show again
         self.window.deiconify()
         self.window.update()
-        
-        result = snapshot["result"]
 
-        self.set_translation(
-            result.get("translation", "")
+        # Read translations from the TranslationMap
+        entries = self.lens_controller.get_visible_translations(
+            (left, top, width, height)
         )
+    
+        print(f"TranslationMap Entries: {len(entries)}")
+
+        if entries:
+
+            self.set_translation(
+                entries[-1].translation
+            )
+
+            print(
+                "Translation:",
+                entries[-1].translation,
+            )
+
+        else:
+
+            self.set_translation("")
 
         self.set_status(
             "Translation Complete",
             "green",
         )
-
-        print("Translation:", result["translation"])
 
     def hide(self):
         

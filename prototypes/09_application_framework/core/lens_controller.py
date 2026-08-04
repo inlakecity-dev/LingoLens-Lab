@@ -3,15 +3,21 @@ core/lens_controller.py
 
 Floating Lens controller.
 
-Coordinates the Floating Lens workflow.
+Coordinates the Floating Lens backend.
 
 Responsibilities
 ----------------
-- Request workspace snapshots from the Controller.
-- Return the captured region and processing result.
+- Coordinate the Floating Lens backend.
+- Provide translated data for the Floating Lens.
+- Support the transition from snapshot-based translation
+  to TranslationMap-based rendering.
 
-This controller contains no capture, OCR, Translation,
-History or UI logic.
+This controller does NOT:
+- Perform desktop capture.
+- Perform OCR.
+- Perform translation.
+- Update the TranslationMap.
+- Render the UI.
 """
 
 from __future__ import annotations
@@ -51,9 +57,9 @@ class LensController:
             "Lens controller initialized."
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # Lifecycle
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
 
     def start(self) -> None:
         """
@@ -85,9 +91,9 @@ class LensController:
             "Lens backend stopped."
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # Workspace Capture
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
 
     def capture_workspace(
         self,
@@ -99,27 +105,11 @@ class LensController:
         """
         Capture and process the current workspace region.
 
-        Parameters
-        ----------
-        left : int
-            Left screen coordinate.
+        The processed snapshot is immediately used to
+        update the TranslationMap.
 
-        top : int
-            Top screen coordinate.
-
-        width : int
-            Capture width.
-
-        height : int
-            Capture height.
-
-        Returns
-        -------
-        dict
-            {
-                "captured_region": CapturedRegion,
-                "result": dict
-            }
+        During the transition period the snapshot is
+        still returned to the caller.
         """
 
         logger.info(
@@ -127,16 +117,44 @@ class LensController:
             "Capturing workspace."
         )
 
-        return self.capture_snapshot(
+        snapshot = self.capture_snapshot(
             left,
             top,
             width,
             height,
         )
+    
+        self.controller.lens_controller.update_translation_map(
+            snapshot["captured_region"],
+            snapshot["result"],
+        )
 
-    # ------------------------------------------------------------------
+        return snapshot
+
+    # --------------------------------------------------
+    # Translation Map
+    # --------------------------------------------------
+
+    def get_visible_translations(
+        self,
+        bounds: tuple[int, int, int, int],
+    ):
+        """
+        Return every translated desktop region visible
+        inside the supplied Floating Lens viewport.
+
+        This is the future primary API used by the
+        Floating Lens once Live Translation continuously
+        maintains the TranslationMap.
+        """
+
+        return self.controller.lens_controller.get_visible_translations(
+            bounds
+        )
+
+    # --------------------------------------------------
     # Snapshot
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
 
     def capture_snapshot(
         self,
@@ -146,21 +164,8 @@ class LensController:
         height: int,
     ) -> dict[str, Any]:
         """
-        Request a workspace snapshot from the Controller.
-
-        Parameters
-        ----------
-        left : int
-            Left screen coordinate.
-
-        top : int
-            Top screen coordinate.
-
-        width : int
-            Capture width.
-
-        height : int
-            Capture height.
+        Request a workspace snapshot from the shared
+        image processing pipeline.
 
         Returns
         -------
@@ -176,12 +181,9 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        snapshot = self.controller.image_pipeline.capture_snapshot(
+        return self.controller.image_pipeline.capture_snapshot(
             left,
             top,
             width,
             height,
         )
-
-        return snapshot
-        

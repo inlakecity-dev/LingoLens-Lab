@@ -62,6 +62,14 @@ class ControllerLens:
 
         if result["status"] != "success":
             return
+            
+        print("\n----- TranslationMap Update -----")
+        print("Original OCR:")
+        print(result["original"])
+        print()
+        print("Translation:")
+        print(result["translation"])
+        print("---------------------------------\n")
 
         self.controller.translation_map.update_region(
             captured_region.bounds,
