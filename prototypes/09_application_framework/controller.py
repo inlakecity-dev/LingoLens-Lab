@@ -20,6 +20,8 @@ from core.translation_map import TranslationMap
 from core.desktop_observer import DesktopObserver
 from core.controller_pipeline import ControllerImagePipeline
 
+from core.controller_live import ControllerLive
+
 from logger import logger
 
 
@@ -51,6 +53,8 @@ class Controller:
         
         # Shared image processing pipeline.
         self.image_pipeline = ControllerImagePipeline(self)
+        
+        self.live_controller = ControllerLive(self)
 
     
 
@@ -100,28 +104,14 @@ class Controller:
     def start_live_mode(self):
         """
         Start Live Translation.
-
-        This starts the Desktop Observer.
         """
-
-        logger.info(
-            "LIVE",
-            "Starting Live Mode."
-        )
-
-        self.desktop_observer.start()
+        self.live_controller.start_live_mode()
 
     def stop_live_mode(self):
         """
         Stop Live Translation.
         """
-
-        logger.info(
-            "LIVE",
-            "Stopping Live Mode."
-        )
-
-        self.desktop_observer.stop()
+        self.live_controller.stop_live_mode()
 
     def on_desktop_changed(
         self,
@@ -130,52 +120,12 @@ class Controller:
         """
         Called by the Desktop Observer whenever the
         Windows desktop changes.
-
-        DesktopObserver only reports dirty regions.
-
-        The Controller coordinates the
-        Live Translation pipeline..
         """
-
-        logger.info(
-            "DESKTOP",
-            f"Desktop changed ({len(dirty_regions)} dirty region(s))."
+        self.live_controller.on_desktop_changed(
+            dirty_regions
         )
 
-        for bounds in dirty_regions:
-
-            # ------------------------------------------
-            # Remove outdated translations
-            # ------------------------------------------
-
-            remove_method = getattr(
-                self.translation_map,
-                "remove_entries_in_region",
-                None,
-            )
-
-            if callable(remove_method):
-                remove_method(bounds)
-
-            # ------------------------------------------
-            # Capture updated desktop region
-            # ------------------------------------------
-
-            snapshot = self.image_pipeline.capture_snapshot(
-                *bounds
-            )
-
-            result = snapshot["result"]
-
-            if result["status"] != "success":
-                continue
-
-            self.translation_map.add_entry(
-                snapshot["captured_region"].bounds,
-                result["original"],
-                result["translation"],
-                )
-
+      
     # --------------------------------------------------
     # FLOATING LENS
     # --------------------------------------------------
