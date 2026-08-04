@@ -3,13 +3,12 @@ core/controller_lens.py
 
 Floating Lens controller service.
 
-Coordinates every TranslationMap interaction for the
+Coordinates TranslationMap interactions for the
 Floating Lens workflow.
 
 Responsibilities
 ----------------
 - Update the TranslationMap.
-- Remove outdated translations.
 - Return visible translations for the Floating Lens.
 
 This service does NOT:
@@ -51,39 +50,24 @@ class ControllerLens:
     # Translation Map
     # --------------------------------------------------
 
-    def add_translation(
+    def update_translation_map(
         self,
-        bounds,
-        original,
-        translation,
+        captured_region,
+        result,
     ):
         """
-        Add a translated region to the TranslationMap.
+        Update the TranslationMap using the latest
+        processed snapshot.
         """
 
-        self.controller.translation_map.add_entry(
-            bounds,
-            original,
-            translation,
+        if result["status"] != "success":
+            return
+
+        self.controller.translation_map.update_region(
+            captured_region.bounds,
+            result["original"],
+            result["translation"],
         )
-
-    def remove_translations(
-        self,
-        bounds,
-    ):
-        """
-        Remove outdated translations from the
-        supplied desktop region.
-        """
-
-        remove_method = getattr(
-            self.controller.translation_map,
-            "remove_entries_in_region",
-            None,
-        )
-
-        if callable(remove_method):
-            remove_method(bounds)
 
     # --------------------------------------------------
     # Floating Lens
@@ -115,27 +99,4 @@ class ControllerLens:
 
         return self.controller.translation_map.get_entries_in_region(
             bounds
-        )
-
-    # --------------------------------------------------
-    # Convenience Helpers
-    # --------------------------------------------------
-
-    def update_translation_map(
-        self,
-        captured_region,
-        result,
-    ):
-        """
-        Update the TranslationMap using the
-        latest processed snapshot.
-        """
-
-        if result["status"] != "success":
-            return
-
-        self.add_translation(
-            captured_region.bounds,
-            result["original"],
-            result["translation"],
         )
