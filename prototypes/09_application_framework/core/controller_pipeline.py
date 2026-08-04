@@ -109,8 +109,7 @@ class ControllerImagePipeline:
             left + width,
             top + height,
         )
-        region.image.save("debug_capture.png")
-
+        
         capture_time = time.perf_counter() - start
 
         print(

@@ -21,6 +21,8 @@ from core.desktop_observer import DesktopObserver
 from core.controller_pipeline import ControllerImagePipeline
 
 from core.controller_live import ControllerLive
+from core.controller_lens import ControllerLens
+from core.controller_tools import ControllerTools
 
 from logger import logger
 
@@ -55,6 +57,12 @@ class Controller:
         self.image_pipeline = ControllerImagePipeline(self)
         
         self.live_controller = ControllerLive(self)
+        
+        # Floating Lens / TranslationMap service.
+        self.lens_controller = ControllerLens(self)
+        
+        # Application tools service.
+        self.tools_controller = ControllerTools(self)
 
     
 
@@ -86,13 +94,10 @@ class Controller:
 
         result = snapshot["result"]
 
-        if result["status"] == "success":
-
-            self.translation_map.add_entry(
-                snapshot["captured_region"].bounds,
-                result["original"],
-                result["translation"],
-            )  
+        self.lens_controller.update_translation_map(
+            snapshot["captured_region"],
+            result,
+        ) 
             
         return result
      
@@ -136,15 +141,11 @@ class Controller:
     ):
         """
         Called whenever the Floating Lens moves.
-
-        The Floating Lens only reports its
-        desktop position.
-
-        The Controller determines which
-        translations are visible.
         """
 
-        return self.get_visible_translations(bounds)
+        return self.lens_controller.on_lens_moved(
+            bounds
+        )
 
     def get_visible_translations(
         self,
@@ -153,15 +154,9 @@ class Controller:
         """
         Return every translation visible inside
         the supplied desktop region.
-
-        This is the ONLY supported way for the
-        Floating Lens to obtain translation data.
-
-        The TranslationMap is never exposed to
-        the UI.
         """
 
-        return self.translation_map.get_entries_in_region(
+        return self.lens_controller.get_visible_translations(
             bounds
         )
 
@@ -170,25 +165,15 @@ class Controller:
     # ----------------------------------------------
 
     def show_history(self):
+        """
+        Open the History tool.
+        """
 
-        logger.info(
-            "TOOLS",
-            "History selected"
-        )
-
-        messagebox.showinfo(
-            "History",
-            "History window will be implemented in the next phase."
-        )
+        self.tools_controller.show_history()
 
     def show_log_viewer(self):
+        """
+        Open the Log Viewer.
+        """
 
-        logger.info(
-            "TOOLS",
-            "Log Viewer selected"
-        )
-
-        messagebox.showinfo(
-            "Log Viewer",
-            "Log Viewer will be implemented in the next phase."
-        )
+        self.tools_controller.show_log_viewer()
