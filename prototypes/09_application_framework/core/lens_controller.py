@@ -7,19 +7,16 @@ Coordinates the Floating Lens workflow.
 
 Responsibilities
 ----------------
-- Capture a workspace region.
-- Process the captured image using the shared Controller.
+- Request workspace snapshots from the Controller.
 - Return the captured region and processing result.
 
-This controller contains no OCR, Translation,
+This controller contains no capture, OCR, Translation,
 History or UI logic.
 """
 
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
-
-from core.capture_engine import capture_region
 
 if TYPE_CHECKING:
     from controller import Controller
@@ -42,7 +39,7 @@ class LensController:
         Parameters
         ----------
         controller : Controller
-            Shared application controller used to process images.
+            Shared application controller.
         """
 
         self.controller = controller
@@ -149,7 +146,7 @@ class LensController:
         height: int,
     ) -> dict[str, Any]:
         """
-        Capture a screen region and process it.
+        Request a workspace snapshot from the Controller.
 
         Parameters
         ----------
@@ -179,15 +176,11 @@ class LensController:
             "Starting snapshot capture."
         )
 
-        captured_region = capture_region(
+        result = self.controller.capture_snapshot(
             left,
             top,
-            left + width,
-            top + height,
-        )
-
-        result = self.controller.process_image(
-            captured_region.image
+            width,
+            height,
         )
 
         logger.info(
@@ -195,7 +188,4 @@ class LensController:
             "Snapshot processing completed."
         )
 
-        return {
-            "captured_region": captured_region,
-            "result": result,
-        }
+        return result

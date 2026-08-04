@@ -1,8 +1,17 @@
 """
 LingoLens Application Controller
 
-Coordinates the workflow between the UI
-and the application core.
+Coordinates every workflow inside LingoLens.
+
+The Controller is the single system coordinator.
+
+Responsibilities
+----------------
+• Owns the image processing pipeline.
+• Owns Live Mode.
+• Owns the TranslationMap.
+• Supplies visible translations to the Floating Lens.
+• Coordinates DesktopObserver.
 """
 
 import time
@@ -26,8 +35,11 @@ from config import (
 
 class Controller:
     """
-    Coordinates the workflow between the UI
-    and the application core.
+    Central coordinator for the LingoLens application.
+
+    The Controller is the only component allowed to
+    coordinate OCR, Translation, History, Live Mode,
+    Desktop Observer and the Translation Map.
     """
 
     def __init__(self, app_settings):
@@ -38,10 +50,10 @@ class Controller:
         # Core Components
         # ----------------------------------------------
 
-        # Central application Translation Map
+        # Single source of truth for the active desktop.
         self.translation_map = TranslationMap()
 
-        # Live Desktop Observer
+        # Live Desktop Observer.
         self.desktop_observer = DesktopObserver(self)
 
     # --------------------------------------------------
@@ -51,11 +63,13 @@ class Controller:
     def process_image(self, image):
         """
         Process an image through the OCR,
-        translation and history pipeline.
+        Translation and History pipeline.
 
-        This method is shared by the standard
-        application workflow and the Floating
-        Lens workflow.
+        This shared pipeline is used by every
+        workflow that requires image processing.
+
+        The caller is responsible for deciding
+        what should happen with the returned result.
         """
 
         # ----------------------------------------------
@@ -85,22 +99,18 @@ class Controller:
 
         original_text = extract_text(
             image,
-            self.app_settings.enabled_ocr_languages
+            self.app_settings.enabled_ocr_languages,
         )
 
         ocr_time = time.perf_counter() - start
 
-        print(
-            f"OCR         : {ocr_time:.3f} sec"
-        )
+        print(f"OCR         : {ocr_time:.3f} sec")
 
         if not original_text.strip():
 
             total_time = time.perf_counter() - total_start
 
-            print(
-                f"TOTAL       : {total_time:.3f} sec\n"
-            )
+            print(f"TOTAL       : {total_time:.3f} sec\n")
 
             return {
                 "status": "no_text",
@@ -130,12 +140,10 @@ class Controller:
 
         translation_time = time.perf_counter() - start
 
-        print(
-            f"Translation : {translation_time:.3f} sec"
-        )
+        print(f"Translation : {translation_time:.3f} sec")
 
         # ----------------------------------------------
-        # Save History
+        # History
         # ----------------------------------------------
 
         start = time.perf_counter()
@@ -149,17 +157,12 @@ class Controller:
 
         history_time = time.perf_counter() - start
 
-        print(
-            f"History     : {history_time:.3f} sec"
-        )
+        print(f"History     : {history_time:.3f} sec")
 
         total_time = time.perf_counter() - total_start
 
         print("-" * 35)
-
-        print(
-            f"TOTAL       : {total_time:.3f} sec\n"
-        )
+        print(f"TOTAL       : {total_time:.3f} sec\n")
 
         return {
             "status": "success",
@@ -175,6 +178,10 @@ class Controller:
             "total_time": total_time,
         }
 
+    # --------------------------------------------------
+    # MANUAL TRANSLATION
+    # --------------------------------------------------
+
     def translate_region(
         self,
         x1,
@@ -183,13 +190,15 @@ class Controller:
         y2,
     ):
         """
-        Capture a screen region and process it
-        through the shared image processing
-        pipeline.
+        Capture a user-selected region and process it
+        through the shared image processing pipeline.
+
+        Manual Translation and Live Translation both
+        reuse the same processing pipeline.
         """
 
         # ----------------------------------------------
-        # Capture selected screen region
+        # Capture selected region
         # ----------------------------------------------
 
         start = time.perf_counter()
@@ -203,9 +212,7 @@ class Controller:
 
         capture_time = time.perf_counter() - start
 
-        print(
-            f"Capture     : {capture_time:.3f} sec"
-        )
+        print(f"Capture     : {capture_time:.3f} sec")
 
         # ----------------------------------------------
         # Process Image
@@ -213,7 +220,12 @@ class Controller:
 
         result = self.process_image(region.image)
 
+        # ----------------------------------------------
+        # Update Translation Map
+        # ----------------------------------------------
+
         if result["status"] == "success":
+
             self.translation_map.add_entry(
                 region.bounds,
                 result["original"],
@@ -224,28 +236,33 @@ class Controller:
 
         return result
 
-    def get_translation_map(self):
-        """
-        Return the application's Translation Map.
-        """
-
-        return self.translation_map
-
     # --------------------------------------------------
     # LIVE MODE
     # --------------------------------------------------
 
     def start_live_mode(self):
         """
-        Start the Desktop Observer.
+        Start Live Translation.
+
+        This starts the Desktop Observer.
         """
+
+        logger.info(
+            "LIVE",
+            "Starting Live Mode."
+        )
 
         self.desktop_observer.start()
 
     def stop_live_mode(self):
         """
-        Stop the Desktop Observer.
+        Stop Live Translation.
         """
+
+        logger.info(
+            "LIVE",
+            "Stopping Live Mode."
+        )
 
         self.desktop_observer.stop()
 
@@ -255,24 +272,97 @@ class Controller:
     ):
         """
         Called by the Desktop Observer whenever the
-        desktop changes.
+        Windows desktop changes.
 
-        This is the future entry point for the
+        DesktopObserver only reports dirty regions.
+
+        The Controller owns the complete
         Live Translation pipeline.
         """
 
         logger.info(
-            "Desktop changed (%d dirty region(s)).",
-            len(dirty_regions),
+            "DESKTOP",
+            f"Desktop changed ({len(dirty_regions)} dirty region(s))."
         )
 
-        # Future pipeline:
-        #
-        # for region in dirty_regions:
-        #     capture
-        #     OCR
-        #     translate
-        #     update TranslationMap
+        for bounds in dirty_regions:
+
+            # ------------------------------------------
+            # Remove outdated translations
+            # ------------------------------------------
+
+            remove_method = getattr(
+                self.translation_map,
+                "remove_entries_in_region",
+                None,
+            )
+
+            if callable(remove_method):
+                remove_method(bounds)
+
+            # ------------------------------------------
+            # Capture updated desktop region
+            # ------------------------------------------
+
+            region = capture_region(*bounds)
+
+            # ------------------------------------------
+            # Shared processing pipeline
+            # ------------------------------------------
+
+            result = self.process_image(region.image)
+
+            if result["status"] != "success":
+                continue
+
+            # ------------------------------------------
+            # Update Translation Map
+            # ------------------------------------------
+
+            self.translation_map.add_entry(
+                region.bounds,
+                result["original"],
+                result["translation"],
+            )
+
+    # --------------------------------------------------
+    # FLOATING LENS
+    # --------------------------------------------------
+
+    def on_lens_moved(
+        self,
+        bounds,
+    ):
+        """
+        Called whenever the Floating Lens moves.
+
+        The Floating Lens only reports its
+        desktop position.
+
+        The Controller determines which
+        translations are visible.
+        """
+
+        return self.get_visible_translations(bounds)
+
+    def get_visible_translations(
+        self,
+        bounds,
+    ):
+        """
+        Return every translation visible inside
+        the supplied desktop region.
+
+        This is the ONLY supported way for the
+        Floating Lens to obtain translation data.
+
+        The TranslationMap is never exposed to
+        the UI.
+        """
+
+        return self.translation_map.get_entries_in_region(
+            bounds
+        )
 
     # ----------------------------------------------
     # TOOLS
