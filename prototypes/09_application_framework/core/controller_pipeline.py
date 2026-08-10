@@ -5,13 +5,14 @@ Controller Image Pipeline
 
 Provides the shared image capture pipeline used by the Controller.
 
-Responsibilities
-----------------
+## Responsibilities
+
 - Capture a desktop region.
 - Process the captured image using the Controller's
   shared image processing pipeline.
 
 This class does NOT:
+
 - Perform Live Translation
 - Update the TranslationMap
 - Control the Floating Lens
@@ -103,17 +104,31 @@ class ControllerImagePipeline:
 
         start = time.perf_counter()
 
+        # --------------------------------------------------
+        # Native DesktopVisionEngine capture.
+        #
+        # capture_region() captures the complete native
+        # virtual desktop and crops the requested region.
+        # --------------------------------------------------
+
         region = capture_region(
             left,
             top,
             left + width,
             top + height,
         )
-        
+
         capture_time = time.perf_counter() - start
 
         print(
-            f"Capture     : {capture_time:.3f} sec"
+            f"Region Size : "
+            f"{region.image.width} x "
+            f"{region.image.height}"
+        )
+
+        print(
+            f"Capture     : "
+            f"{capture_time:.3f} sec"
         )
 
         result = self.process_image(
@@ -131,7 +146,7 @@ class ControllerImagePipeline:
             "captured_region": region,
             "result": result,
         }
-        
+
     # --------------------------------------------------
     # IMAGE PROCESSING PIPELINE
     # --------------------------------------------------
@@ -162,12 +177,13 @@ class ControllerImagePipeline:
 
         ocr_languages = "+".join(
             OCR_LANGUAGE_MAP[language]
-            for language in self.controller.app_settings.enabled_ocr_languages
+            for language in
+            self.controller.app_settings.enabled_ocr_languages
         )
 
         total_start = time.perf_counter()
-        
-               # ----------------------------------------------
+
+        # ----------------------------------------------
         # OCR
         # ----------------------------------------------
 
@@ -180,13 +196,22 @@ class ControllerImagePipeline:
 
         ocr_time = time.perf_counter() - start
 
-        print(f"OCR         : {ocr_time:.3f} sec")
+        print(
+            f"OCR         : "
+            f"{ocr_time:.3f} sec"
+        )
 
         if not original_text.strip():
 
-            total_time = time.perf_counter() - total_start
+            total_time = (
+                time.perf_counter()
+                - total_start
+            )
 
-            print(f"TOTAL       : {total_time:.3f} sec\n")
+            print(
+                f"TOTAL       : "
+                f"{total_time:.3f} sec\n"
+            )
 
             return {
                 "status": "no_text",
@@ -214,9 +239,15 @@ class ControllerImagePipeline:
             target_language,
         )
 
-        translation_time = time.perf_counter() - start
+        translation_time = (
+            time.perf_counter()
+            - start
+        )
 
-        print(f"Translation : {translation_time:.3f} sec")
+        print(
+            f"Translation : "
+            f"{translation_time:.3f} sec"
+        )
 
         # ----------------------------------------------
         # History
@@ -231,14 +262,27 @@ class ControllerImagePipeline:
             target_language,
         )
 
-        history_time = time.perf_counter() - start
+        history_time = (
+            time.perf_counter()
+            - start
+        )
 
-        print(f"History     : {history_time:.3f} sec")
+        print(
+            f"History     : "
+            f"{history_time:.3f} sec"
+        )
 
-        total_time = time.perf_counter() - total_start
+        total_time = (
+            time.perf_counter()
+            - total_start
+        )
 
         print("-" * 35)
-        print(f"TOTAL       : {total_time:.3f} sec\n")
+
+        print(
+            f"TOTAL       : "
+            f"{total_time:.3f} sec\n"
+        )
 
         return {
             "status": "success",
@@ -253,4 +297,3 @@ class ControllerImagePipeline:
             "history_time": history_time,
             "total_time": total_time,
         }
-
