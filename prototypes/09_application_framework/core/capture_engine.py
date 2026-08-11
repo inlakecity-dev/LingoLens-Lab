@@ -5,8 +5,9 @@ Capture Engine
 
 Responsible for capturing images from the Windows desktop.
 
-The native DesktopVisionEngine provides the complete virtual desktop.
-Python performs region cropping on the captured image.
+The native DesktopVisionEngine provides the complete virtual desktop
+and physical monitor layout. Python performs region cropping on the
+captured image.
 
 This module contains no OCR, Translation or UI logic.
 """
@@ -16,7 +17,6 @@ import ctypes
 import os
 
 from dataclasses import dataclass
-
 from pathlib import Path
 
 from PIL import Image
@@ -42,11 +42,208 @@ class DVEPB_Image(ctypes.Structure):
 
 
 # ------------------------------------------------------------
+# Native bridge output structure
+# ------------------------------------------------------------
+
+class DVEPB_Output(ctypes.Structure):
+    """
+    Native physical display metadata exposed by
+    DesktopVisionEnginePythonBridge.dll.
+
+    Coordinates use Windows virtual-desktop coordinates.
+    """
+
+    _fields_ = [
+        ("left", ctypes.c_int32),
+        ("top", ctypes.c_int32),
+        ("right", ctypes.c_int32),
+        ("bottom", ctypes.c_int32),
+        ("attachedToDesktop", ctypes.c_uint8),
+        ("primary", ctypes.c_uint8),
+    ]
+
+
+# ------------------------------------------------------------
+# Native bridge dirty region structure
+# ------------------------------------------------------------
+
+class DVEPB_DirtyRegion(ctypes.Structure):
+    """
+    Native desktop dirty-region metadata.
+
+    Coordinates use Windows virtual-desktop coordinates.
+    """
+
+    _fields_ = [
+        ("left", ctypes.c_int32),
+        ("top", ctypes.c_int32),
+        ("right", ctypes.c_int32),
+        ("bottom", ctypes.c_int32),
+    ]
+
+
+# ------------------------------------------------------------
+# Native bridge move region structure
+# ------------------------------------------------------------
+
+class DVEPB_MoveRegion(ctypes.Structure):
+    """
+    Native desktop move-region metadata.
+
+    Destination and source coordinates use Windows
+    virtual-desktop coordinates.
+    """
+
+    _fields_ = [
+        ("destinationLeft", ctypes.c_int32),
+        ("destinationTop", ctypes.c_int32),
+        ("destinationRight", ctypes.c_int32),
+        ("destinationBottom", ctypes.c_int32),
+        ("sourceX", ctypes.c_int32),
+        ("sourceY", ctypes.c_int32),
+    ]
+
+
+# ------------------------------------------------------------
+# Python desktop change representation
+# ------------------------------------------------------------
+
+@dataclass(slots=True)
+class DesktopChangeRegion:
+    """
+    Represents one changed desktop region.
+
+    Coordinates use Windows virtual-desktop coordinates.
+    """
+
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+    @property
+    def width(self) -> int:
+        """Return region width."""
+
+        return self.right - self.left
+
+    @property
+    def height(self) -> int:
+        """Return region height."""
+
+        return self.bottom - self.top
+
+    @property
+    def bounds(self) -> tuple[int, int, int, int]:
+        """
+        Return region bounds as:
+
+            (left, top, width, height)
+        """
+
+        return (
+            self.left,
+            self.top,
+            self.width,
+            self.height,
+        )
+
+
+@dataclass(slots=True)
+class DesktopMoveRegion:
+    """
+    Represents one desktop move operation.
+
+    All coordinates use Windows virtual-desktop coordinates.
+    """
+
+    destination_left: int
+    destination_top: int
+    destination_right: int
+    destination_bottom: int
+    source_x: int
+    source_y: int
+
+    @property
+    def destination_bounds(
+        self,
+    ) -> tuple[int, int, int, int]:
+        """
+        Return destination bounds as:
+
+            (left, top, width, height)
+        """
+
+        return (
+            self.destination_left,
+            self.destination_top,
+            self.destination_right
+            - self.destination_left,
+            self.destination_bottom
+            - self.destination_top,
+        )
+
+
+# ------------------------------------------------------------
+# Python monitor representation
+# ------------------------------------------------------------
+
+@dataclass(slots=True)
+class DesktopMonitor:
+    """
+    Represents one physical monitor in the Windows
+    virtual desktop.
+    """
+
+    left: int
+    top: int
+    right: int
+    bottom: int
+    attached_to_desktop: bool
+    primary: bool
+
+    @property
+    def width(self) -> int:
+        """Monitor width."""
+
+        return self.right - self.left
+
+    @property
+    def height(self) -> int:
+        """Monitor height."""
+
+        return self.bottom - self.top
+
+    @property
+    def bounds(self) -> tuple[int, int, int, int]:
+        """
+        Return monitor bounds as:
+
+            (left, top, width, height)
+        """
+
+        return (
+            self.left,
+            self.top,
+            self.width,
+            self.height,
+        )
+
+
+# ------------------------------------------------------------
 # Native bridge state
 # ------------------------------------------------------------
 
 _bridge_dll = None
 _engine_initialized = False
+
+_desktop_monitors: list[DesktopMonitor] = []
+_desktop_bounds: tuple[int, int, int, int] = (
+    0,
+    0,
+    0,
+    0,
+)
 
 
 # ------------------------------------------------------------
@@ -87,16 +284,6 @@ def _find_bridge_dll() -> Path:
             f"missing file:\n{path}"
         )
 
-    # capture_engine.py is located at:
-    #
-    # LingoLens-Lab/
-    #   prototypes/
-    #     09_application_framework/
-    #       core/
-    #         capture_engine.py
-    #
-    # parents[4] = Projects/
-
     projects_dir = (
         Path(__file__).resolve().parents[4]
     )
@@ -119,6 +306,124 @@ def _find_bridge_dll() -> Path:
         )
 
     return bridge_path
+
+
+# ------------------------------------------------------------
+# Desktop bounds calculation
+# ------------------------------------------------------------
+
+def _calculate_desktop_bounds(
+    monitors: list[DesktopMonitor],
+) -> tuple[int, int, int, int]:
+    """
+    Calculate the complete virtual desktop bounds
+    from the detected physical monitors.
+
+    Returns
+    -------
+    tuple
+        (left, top, width, height)
+    """
+
+    if not monitors:
+        raise RuntimeError(
+            "No desktop monitors detected."
+        )
+
+    left = min(
+        monitor.left
+        for monitor in monitors
+    )
+
+    top = min(
+        monitor.top
+        for monitor in monitors
+    )
+
+    right = max(
+        monitor.right
+        for monitor in monitors
+    )
+
+    bottom = max(
+        monitor.bottom
+        for monitor in monitors
+    )
+
+    return (
+        left,
+        top,
+        right - left,
+        bottom - top,
+    )
+
+
+# ------------------------------------------------------------
+# Load output metadata
+# ------------------------------------------------------------
+
+def _load_desktop_metadata() -> None:
+    """
+    Load physical monitor metadata from the native engine
+    and calculate the virtual desktop bounds.
+
+    This is performed once when the native engine is
+    initialized.
+    """
+
+    global _desktop_monitors
+    global _desktop_bounds
+
+    output_count = (
+        _bridge_dll.DVEPB_GetOutputCount()
+    )
+
+    if output_count == 0:
+        raise RuntimeError(
+            "DesktopVisionEngine detected no displays."
+        )
+
+    monitors = []
+
+    for index in range(output_count):
+
+        native_output = DVEPB_Output()
+
+        success = (
+            _bridge_dll.DVEPB_GetOutput(
+                index,
+                ctypes.byref(native_output),
+            )
+        )
+
+        if not success:
+            raise RuntimeError(
+                "DesktopVisionEngine failed to "
+                f"retrieve output #{index}."
+            )
+
+        monitors.append(
+            DesktopMonitor(
+                left=native_output.left,
+                top=native_output.top,
+                right=native_output.right,
+                bottom=native_output.bottom,
+                attached_to_desktop=bool(
+                    native_output.attachedToDesktop
+                ),
+                primary=bool(
+                    native_output.primary
+                ),
+            )
+        )
+
+    _desktop_monitors = monitors
+
+    _desktop_bounds = (
+        _calculate_desktop_bounds(
+            monitors
+        )
+    )
 
 
 # ------------------------------------------------------------
@@ -145,7 +450,7 @@ def _ensure_native_engine() -> None:
     )
 
     # --------------------------------------------------------
-    # Define native function signatures.
+    # Image functions
     # --------------------------------------------------------
 
     _bridge_dll.DVEPB_Initialize.argtypes = []
@@ -173,6 +478,63 @@ def _ensure_native_engine() -> None:
     _bridge_dll.DVEPB_FreeImage.restype = None
 
     # --------------------------------------------------------
+    # Output metadata functions
+    # --------------------------------------------------------
+
+    _bridge_dll.DVEPB_GetOutputCount.argtypes = []
+
+    _bridge_dll.DVEPB_GetOutputCount.restype = (
+        ctypes.c_uint32
+    )
+
+    _bridge_dll.DVEPB_GetOutput.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(DVEPB_Output),
+    ]
+
+    _bridge_dll.DVEPB_GetOutput.restype = (
+        ctypes.c_bool
+    )
+
+    # --------------------------------------------------------
+    # Desktop dirty-region functions
+    # --------------------------------------------------------
+
+    _bridge_dll.DVEPB_GetDirtyRegionCount.argtypes = []
+
+    _bridge_dll.DVEPB_GetDirtyRegionCount.restype = (
+        ctypes.c_uint32
+    )
+
+    _bridge_dll.DVEPB_GetDirtyRegion.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(DVEPB_DirtyRegion),
+    ]
+
+    _bridge_dll.DVEPB_GetDirtyRegion.restype = (
+        ctypes.c_bool
+    )
+
+    # --------------------------------------------------------
+    # Desktop move-region functions
+    # --------------------------------------------------------
+
+    _bridge_dll.DVEPB_GetMoveRegionCount.argtypes = []
+
+    _bridge_dll.DVEPB_GetMoveRegionCount.restype = (
+        ctypes.c_uint32
+    )
+
+    _bridge_dll.DVEPB_GetMoveRegion.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(DVEPB_MoveRegion),
+    ]
+
+    _bridge_dll.DVEPB_GetMoveRegion.restype = (
+        ctypes.c_bool
+    )
+
+    # --------------------------------------------------------
     # Initialize native engine.
     # --------------------------------------------------------
 
@@ -182,6 +544,18 @@ def _ensure_native_engine() -> None:
         raise RuntimeError(
             "DesktopVisionEngine initialization failed."
         )
+
+    try:
+
+        _load_desktop_metadata()
+
+    except Exception:
+
+        _bridge_dll.DVEPB_Shutdown()
+
+        _bridge_dll = None
+
+        raise
 
     _engine_initialized = True
 
@@ -199,6 +573,8 @@ def shutdown_capture_engine() -> None:
 
     global _bridge_dll
     global _engine_initialized
+    global _desktop_monitors
+    global _desktop_bounds
 
     if (
         _bridge_dll is not None
@@ -209,10 +585,217 @@ def shutdown_capture_engine() -> None:
     _bridge_dll = None
     _engine_initialized = False
 
+    _desktop_monitors = []
+
+    _desktop_bounds = (
+        0,
+        0,
+        0,
+        0,
+    )
+
 
 atexit.register(
     shutdown_capture_engine
 )
+
+
+# ------------------------------------------------------------
+# Desktop metadata
+# ------------------------------------------------------------
+
+def get_monitors() -> list[DesktopMonitor]:
+    """
+    Return the physical monitors detected by the
+    native DesktopVisionEngine.
+
+    Returns
+    -------
+    list[DesktopMonitor]
+        Monitor layout using Windows virtual-desktop
+        coordinates.
+    """
+
+    _ensure_native_engine()
+
+    return _desktop_monitors.copy()
+
+
+def get_desktop_bounds() -> tuple[int, int, int, int]:
+    """
+    Return the complete Windows virtual desktop bounds.
+
+    The returned format is:
+
+        (left, top, width, height)
+
+    The coordinates are derived from the physical monitor
+    layout rather than assuming that the desktop starts at
+    coordinate 0,0.
+    """
+
+    _ensure_native_engine()
+
+    return _desktop_bounds
+
+
+# ------------------------------------------------------------
+# Desktop Change Metadata
+# ------------------------------------------------------------
+
+def get_last_desktop_changes() -> dict:
+    """
+    Return desktop change metadata from the most recent
+    native desktop capture.
+
+    The native DesktopVisionEngine updates its dirty and
+    move regions whenever DVEPB_CaptureDesktop() is called.
+
+    Returns
+    -------
+    dict
+        {
+            "dirty_regions": list[DesktopChangeRegion],
+            "move_regions": list[DesktopMoveRegion],
+        }
+    """
+
+    _ensure_native_engine()
+
+    dirty_regions = []
+
+    dirty_count = (
+        _bridge_dll.DVEPB_GetDirtyRegionCount()
+    )
+
+    for index in range(dirty_count):
+
+        native_region = (
+            DVEPB_DirtyRegion()
+        )
+
+        success = (
+            _bridge_dll.DVEPB_GetDirtyRegion(
+                index,
+                ctypes.byref(
+                    native_region
+                ),
+            )
+        )
+
+        if not success:
+            raise RuntimeError(
+                "DesktopVisionEngine failed to "
+                f"retrieve dirty region #{index}."
+            )
+
+        dirty_regions.append(
+            DesktopChangeRegion(
+                left=native_region.left,
+                top=native_region.top,
+                right=native_region.right,
+                bottom=native_region.bottom,
+            )
+        )
+
+    move_regions = []
+
+    move_count = (
+        _bridge_dll.DVEPB_GetMoveRegionCount()
+    )
+
+    for index in range(move_count):
+
+        native_region = (
+            DVEPB_MoveRegion()
+        )
+
+        success = (
+            _bridge_dll.DVEPB_GetMoveRegion(
+                index,
+                ctypes.byref(
+                    native_region
+                ),
+            )
+        )
+
+        if not success:
+            raise RuntimeError(
+                "DesktopVisionEngine failed to "
+                f"retrieve move region #{index}."
+            )
+
+        move_regions.append(
+            DesktopMoveRegion(
+                destination_left=(
+                    native_region.destinationLeft
+                ),
+                destination_top=(
+                    native_region.destinationTop
+                ),
+                destination_right=(
+                    native_region.destinationRight
+                ),
+                destination_bottom=(
+                    native_region.destinationBottom
+                ),
+                source_x=native_region.sourceX,
+                source_y=native_region.sourceY,
+            )
+        )
+
+    return {
+        "dirty_regions": dirty_regions,
+        "move_regions": move_regions,
+    }
+
+
+# ------------------------------------------------------------
+# Desktop Observation Capture
+# ------------------------------------------------------------
+
+def capture_desktop_changes() -> dict:
+    """
+    Perform one native desktop acquisition and return
+    the desktop change metadata produced by that capture.
+
+    The captured image itself is intentionally not returned.
+
+    This function is intended for DesktopObserver and
+    Live Mode. It does not replace capture_region().
+
+    Returns
+    -------
+    dict
+        {
+            "dirty_regions": list[DesktopChangeRegion],
+            "move_regions": list[DesktopMoveRegion],
+        }
+    """
+
+    _ensure_native_engine()
+
+    native_image = DVEPB_Image()
+
+    try:
+
+        success = _bridge_dll.DVEPB_CaptureDesktop(
+            ctypes.byref(native_image)
+        )
+
+        if not success:
+            raise RuntimeError(
+                "DesktopVisionEngine failed to "
+                "capture the desktop for observation."
+            )
+
+        return get_last_desktop_changes()
+
+    finally:
+
+        _bridge_dll.DVEPB_FreeImage(
+            ctypes.byref(native_image)
+        )
 
 
 # ------------------------------------------------------------
@@ -301,7 +884,7 @@ def capture_fullscreen() -> Image.Image:
                 "capture the desktop."
             )
 
-        if native_image.pixels is None:
+        if not native_image.pixels:
             raise RuntimeError(
                 "DesktopVisionEngine returned an "
                 "empty pixel buffer."
@@ -339,10 +922,35 @@ def capture_fullscreen() -> Image.Image:
             )
 
         # ----------------------------------------------------
+        # Verify native image dimensions against the
+        # virtual desktop metadata.
+        # ----------------------------------------------------
+
+        (
+            desktop_left,
+            desktop_top,
+            desktop_width,
+            desktop_height,
+        ) = _desktop_bounds
+
+        if native_image.width != desktop_width:
+            raise RuntimeError(
+                "Native desktop width does not match "
+                "desktop metadata: "
+                f"{native_image.width} "
+                f"(expected {desktop_width})."
+            )
+
+        if native_image.height != desktop_height:
+            raise RuntimeError(
+                "Native desktop height does not match "
+                "desktop metadata: "
+                f"{native_image.height} "
+                f"(expected {desktop_height})."
+            )
+
+        # ----------------------------------------------------
         # Copy native memory into Python-managed memory.
-        #
-        # The native buffer must be released before this
-        # function returns.
         # ----------------------------------------------------
 
         pixel_buffer = ctypes.string_at(
@@ -352,7 +960,7 @@ def capture_fullscreen() -> Image.Image:
 
         # ----------------------------------------------------
         # Native format is BGRA.
-        # Convert it to a normal Pillow RGBA image.
+        # Convert it to RGBA.
         # ----------------------------------------------------
 
         image = Image.frombuffer(
@@ -432,47 +1040,95 @@ def capture_region(
 
     desktop = capture_fullscreen()
 
-    desktop_width = desktop.width
-    desktop_height = desktop.height
+    (
+        desktop_left,
+        desktop_top,
+        desktop_width,
+        desktop_height,
+    ) = get_desktop_bounds()
+
+    desktop_right = (
+        desktop_left
+        + desktop_width
+    )
+
+    desktop_bottom = (
+        desktop_top
+        + desktop_height
+    )
 
     # --------------------------------------------------------
-    # Validate against the current virtual desktop image.
+    # Validate against the actual Windows virtual desktop.
     # --------------------------------------------------------
 
-    if left < 0:
+    if left < desktop_left:
         raise ValueError(
-            f"Region left coordinate is outside "
-            f"the captured desktop: {left}"
+            f"Region left coordinate {left} "
+            f"is outside the virtual desktop."
         )
 
-    if top < 0:
+    if top < desktop_top:
         raise ValueError(
-            f"Region top coordinate is outside "
-            f"the captured desktop: {top}"
+            f"Region top coordinate {top} "
+            f"is outside the virtual desktop."
         )
 
-    if right > desktop_width:
+    if right > desktop_right:
         raise ValueError(
             f"Region right coordinate {right} "
-            f"exceeds desktop width {desktop_width}."
+            f"exceeds virtual desktop right boundary "
+            f"{desktop_right}."
         )
 
-    if bottom > desktop_height:
+    if bottom > desktop_bottom:
         raise ValueError(
             f"Region bottom coordinate {bottom} "
-            f"exceeds desktop height {desktop_height}."
+            f"exceeds virtual desktop bottom boundary "
+            f"{desktop_bottom}."
         )
 
     # --------------------------------------------------------
-    # Crop from the native full-desktop image.
+    # Convert Windows desktop coordinates into image
+    # coordinates.
+    #
+    # Example:
+    #
+    # Virtual desktop:
+    #     left = -1920
+    #
+    # Requested region:
+    #     left = -1500
+    #
+    # Image coordinate:
+    #     -1500 - (-1920) = 420
+    #
+    # This is why TranslationMap coordinates remain real
+    # Windows coordinates while the Pillow image uses
+    # zero-based coordinates.
     # --------------------------------------------------------
+
+    crop_left = (
+        left - desktop_left
+    )
+
+    crop_top = (
+        top - desktop_top
+    )
+
+    crop_right = (
+        right - desktop_left
+    )
+
+    crop_bottom = (
+        bottom - desktop_top
+    )
 
     image = desktop.crop(
         (
-            left,
-            top,
-            right,
-            bottom,
+            crop_left,
+            crop_top,
+            crop_right,
+            crop_bottom,
         )
     )
 
@@ -500,7 +1156,7 @@ def capture_bounds(
     bounds : tuple
         Region in the format:
 
-        (left, top, width, height)
+            (left, top, width, height)
 
     Returns
     -------

@@ -5,14 +5,16 @@ Floating Lens controller.
 
 Coordinates the Floating Lens backend.
 
-Responsibilities
-----------------
+## Responsibilities
+
 - Coordinate the Floating Lens backend.
 - Provide translated data for the Floating Lens.
+- Query the TranslationMap using the current Lens viewport.
 - Support the transition from snapshot-based translation
   to TranslationMap-based rendering.
 
 This controller does NOT:
+
 - Perform desktop capture.
 - Perform OCR.
 - Perform translation.
@@ -45,7 +47,7 @@ class LensController:
         Parameters
         ----------
         controller : Controller
-            Shared application controller.
+            Shared application Controller.
         """
 
         self.controller = controller
@@ -103,13 +105,15 @@ class LensController:
         height: int,
     ) -> dict[str, Any]:
         """
-        Capture and process the current workspace region.
+        Capture and process a workspace region.
 
-        The processed snapshot is immediately used to
-        update the TranslationMap.
+        This method is retained as a development/testing
+        workflow for populating the TranslationMap.
 
-        During the transition period the snapshot is
-        still returned to the caller.
+        The Floating Lens itself should use
+        get_visible_translations() to obtain translated
+        content rather than translating whenever the Lens
+        moves.
         """
 
         logger.info(
@@ -123,7 +127,7 @@ class LensController:
             width,
             height,
         )
-    
+
         self.controller.lens_controller.update_translation_map(
             snapshot["captured_region"],
             snapshot["result"],
@@ -140,13 +144,18 @@ class LensController:
         bounds: tuple[int, int, int, int],
     ):
         """
-        Return every translated desktop region visible
-        inside the supplied Floating Lens viewport.
+        Return translations visible inside the
+        Floating Lens viewport.
 
-        This is the future primary API used by the
-        Floating Lens once Live Translation continuously
-        maintains the TranslationMap.
+        The Lens position is used only as a spatial
+        query against the TranslationMap.
+
+        Moving the Lens does NOT trigger capture,
+        OCR or translation.
         """
+
+        if not self.running:
+            return []
 
         return self.controller.lens_controller.get_visible_translations(
             bounds

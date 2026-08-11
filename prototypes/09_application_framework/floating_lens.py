@@ -3,8 +3,18 @@ floating_lens.py
 
 Floating Lens window.
 
-Provides the floating overlay window that will
-later host live OCR, translation and capture tools.
+The Floating Lens is a viewport over the TranslationMap.
+
+It does NOT:
+- Capture the desktop.
+- Perform OCR.
+- Perform Translation.
+- Create TranslationMap entries.
+
+It only:
+- Determines its current desktop position and dimensions.
+- Queries the TranslationMap for visible translations.
+- Renders the appropriate translation.
 """
 
 import tkinter as tk
@@ -18,6 +28,9 @@ from theme import (
 class FloatingLensWindow:
     """
     Floating Lens overlay window.
+
+    The lens acts only as a viewport over the
+    TranslationMap.
     """
 
     def __init__(
@@ -30,7 +43,7 @@ class FloatingLensWindow:
         self.parent = parent
         self.app_settings = app_settings
         self.lens_controller = lens_controller
-        
+
         self.is_open = False
 
         self.window = None
@@ -174,7 +187,7 @@ class FloatingLensWindow:
 
         self.status_label = tk.Label(
             self.status_bar,
-            text="Ready to Capture",
+            text="Ready",
             anchor="w",
             font=("Segoe UI", 9)
         )
@@ -213,80 +226,28 @@ class FloatingLensWindow:
 
     def show(self):
         """
-        Display the Floating Lens and perform the
-        initial workspace capture.
+        Display the Floating Lens.
+
+        The lens does NOT capture the desktop.
+
+        It determines its viewport bounds and queries
+        the TranslationMap for translated regions that
+        intersect the viewport.
         """
-        
+
         self.is_open = True
-
-        # Show once so geometry is calculated
-        self.window.deiconify()
-        self.window.update()
-        
-        # Allow Windows to finish laying out the window.
-        self.window.after(50)
-        self.window.update()
-       
-       # Read the capture region
-        left, top, width, height = self.get_capture_region()
-        
-        print(
-            f"Capture Region: "
-            f"{left}, {top}, {width}, {height}"
-        )
-
-        # Hide the lens before capturing
-        self.window.withdraw()
-        self.window.update()
 
         self.lens_controller.start()
 
-        self.set_status(
-            "Capturing...",
-            "orange",
-        )
-
-        # Populate the TranslationMap
-        self.lens_controller.capture_workspace(
-            left,
-            top,
-            width,
-            height,
-        )
-
-        # Show again
         self.window.deiconify()
+
+        self.window.update_idletasks()
         self.window.update()
 
-        # Read translations from the TranslationMap
-        entries = self.lens_controller.get_visible_translations(
-            (left, top, width, height)
-        )
-    
-        print(f"TranslationMap Entries: {len(entries)}")
-
-        if entries:
-
-            self.set_translation(
-                entries[-1].translation
-            )
-
-            print(
-                "Translation:",
-                entries[-1].translation,
-            )
-
-        else:
-
-            self.set_translation("")
-
-        self.set_status(
-            "Translation Complete",
-            "green",
-        )
+        self.update_viewport()
 
     def hide(self):
-        
+
         self.is_open = False
 
         self.lens_controller.stop()
@@ -305,6 +266,91 @@ class FloatingLensWindow:
         self.hide()
 
     # --------------------------------------------------
+    # TranslationMap Viewport
+    # --------------------------------------------------
+
+    def update_viewport(self):
+        """
+        Query the TranslationMap using the current
+        Floating Lens viewport.
+
+        This method performs no capture, OCR or
+        translation.
+        """
+
+        if not self.is_open:
+            return
+
+        bounds = self.get_viewport_bounds()
+
+        entries = (
+            self.lens_controller.get_visible_translations(
+                bounds
+            )
+        )
+
+        self.render_entries(
+            entries
+        )
+
+    def render_entries(self, entries):
+        """
+        Render translations returned by the
+        TranslationMap.
+        """
+
+        if not entries:
+
+            self.set_translation(
+                ""
+            )
+
+            self.set_status(
+                "No translation in view",
+                "gray",
+            )
+
+            return
+
+        #
+        # For the current single-label UI, display
+        # the visible translated regions together.
+        #
+        translations = []
+
+        for entry in entries:
+
+            if entry.translation:
+
+                translations.append(
+                    entry.translation
+                )
+
+        if not translations:
+
+            self.set_translation(
+                ""
+            )
+
+            self.set_status(
+                "No translation in view",
+                "gray",
+            )
+
+            return
+
+        self.set_translation(
+            "\n\n".join(
+                translations
+            )
+        )
+
+        self.set_status(
+            "Translation Available",
+            "green",
+        )
+
+    # --------------------------------------------------
     # Translation Display
     # --------------------------------------------------
 
@@ -315,7 +361,7 @@ class FloatingLensWindow:
 
         if not text:
 
-            text = "No text detected."
+            text = "No translation in view."
 
         self.translation_label.config(
             text=text
@@ -374,13 +420,27 @@ class FloatingLensWindow:
             f"+{x}+{y}"
         )
 
+        #
+        # The lens has moved.
+        #
+        # Query the TranslationMap using the
+        # new viewport position.
+        #
+
+        self.window.update_idletasks()
+
+        self.update_viewport()
+
     # --------------------------------------------------
-    # Capture Region
+    # Viewport Bounds
     # --------------------------------------------------
 
-    def get_capture_region(self) -> tuple[int, int, int, int]:
+    def get_viewport_bounds(
+        self,
+    ) -> tuple[int, int, int, int]:
         """
-        Return the screen region occupied by the translation viewport.
+        Return the desktop region occupied by the
+        Floating Lens translation viewport.
 
         Returns
         -------
@@ -390,13 +450,28 @@ class FloatingLensWindow:
 
         self.window.update_idletasks()
 
-        left = self.content.winfo_rootx()
-        top = self.content.winfo_rooty()
+        left = (
+            self.content.winfo_rootx()
+        )
 
-        width = self.content.winfo_width()
-        height = self.content.winfo_height()
+        top = (
+            self.content.winfo_rooty()
+        )
 
-        return left, top, width, height
+        width = (
+            self.content.winfo_width()
+        )
+
+        height = (
+            self.content.winfo_height()
+        )
+
+        return (
+            left,
+            top,
+            width,
+            height,
+        )
 
     # --------------------------------------------------
     # Theme

@@ -8,15 +8,16 @@ Provides the shared image capture pipeline used by the Controller.
 ## Responsibilities
 
 - Capture a desktop region.
-- Process the captured image using the Controller's
-  shared image processing pipeline.
+- Perform positional OCR.
+- Translate detected text blocks.
+- Return translated regions with desktop coordinates.
+- Preserve the existing image-processing API.
 
 This class does NOT:
 
-- Perform Live Translation
-- Update the TranslationMap
-- Control the Floating Lens
-- Manage DesktopObserver
+- Update the TranslationMap.
+- Control the Floating Lens.
+- Manage DesktopObserver.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import time
 from core.capture_engine import capture_region
 
 from logger import logger
-from core.ocr import extract_text
+from core.ocr import extract_text_data
 from core.translator import translate_text
 from core.history import save_translation
 
@@ -74,6 +75,9 @@ class ControllerImagePipeline:
         Capture a desktop region and process it through
         the Controller's shared image processing pipeline.
 
+        OCR coordinates are converted from image-local
+        coordinates into Windows desktop coordinates.
+
         Parameters
         ----------
         left : int
@@ -118,7 +122,10 @@ class ControllerImagePipeline:
             top + height,
         )
 
-        capture_time = time.perf_counter() - start
+        capture_time = (
+            time.perf_counter()
+            - start
+        )
 
         print(
             f"Region Size : "
@@ -131,8 +138,18 @@ class ControllerImagePipeline:
             f"{capture_time:.3f} sec"
         )
 
+        # --------------------------------------------------
+        # Process the captured image.
+        #
+        # The region's desktop coordinates are passed into
+        # the image pipeline so OCR coordinates can be
+        # converted into Windows desktop coordinates.
+        # --------------------------------------------------
+
         result = self.process_image(
-            region.image
+            region.image,
+            origin_left=region.left,
+            origin_top=region.top,
         )
 
         result["capture_time"] = capture_time
@@ -151,16 +168,44 @@ class ControllerImagePipeline:
     # IMAGE PROCESSING PIPELINE
     # --------------------------------------------------
 
-    def process_image(self, image):
+    def process_image(
+        self,
+        image,
+        origin_left=0,
+        origin_top=0,
+    ):
         """
-        Process an image through the OCR,
+        Process an image through the positional OCR,
         Translation and History pipeline.
 
-        This shared pipeline is used by every
-        workflow that requires image processing.
+        OCR coordinates are relative to the supplied
+        image. They are converted into desktop
+        coordinates using origin_left and origin_top.
 
-        The caller is responsible for deciding
-        what should happen with the returned result.
+        Parameters
+        ----------
+        image : PIL.Image
+            Image to process.
+
+        origin_left : int
+            Windows desktop X coordinate of the
+            image's left edge.
+
+        origin_top : int
+            Windows desktop Y coordinate of the
+            image's top edge.
+
+        Returns
+        -------
+        dict
+            Processing result containing:
+
+                "original"
+                "translation"
+                "entries"
+
+            where "entries" contains translated
+            positional regions.
         """
 
         # ----------------------------------------------
@@ -184,24 +229,31 @@ class ControllerImagePipeline:
         total_start = time.perf_counter()
 
         # ----------------------------------------------
-        # OCR
+        # Positional OCR
         # ----------------------------------------------
 
         start = time.perf_counter()
 
-        original_text = extract_text(
+        ocr_data = extract_text_data(
             image,
             self.controller.app_settings.enabled_ocr_languages,
         )
 
-        ocr_time = time.perf_counter() - start
+        ocr_time = (
+            time.perf_counter()
+            - start
+        )
 
         print(
             f"OCR         : "
             f"{ocr_time:.3f} sec"
         )
 
-        if not original_text.strip():
+        # ----------------------------------------------
+        # No OCR text
+        # ----------------------------------------------
+
+        if not ocr_data:
 
             total_time = (
                 time.perf_counter()
@@ -217,6 +269,7 @@ class ControllerImagePipeline:
                 "status": "no_text",
                 "original": "",
                 "translation": "",
+                "entries": [],
                 "history_file": None,
                 "ocr_language": ocr_languages,
                 "source_language": source_language,
@@ -228,20 +281,165 @@ class ControllerImagePipeline:
             }
 
         # ----------------------------------------------
+        # Group OCR words into text blocks
+        # ----------------------------------------------
+        #
+        # Tesseract provides block / paragraph / line
+        # information. We use the block and paragraph
+        # identifiers to avoid translating every individual
+        # word.
+        #
+        # Each resulting block becomes a candidate
+        # TranslationMap region.
+        # ----------------------------------------------
+
+        grouped_blocks = {}
+
+        for item in ocr_data:
+
+            block_key = (
+                item.get("block_num", 0),
+                item.get("par_num", 0),
+            )
+
+            if block_key not in grouped_blocks:
+
+                grouped_blocks[block_key] = []
+
+            grouped_blocks[block_key].append(
+                item
+            )
+
+        # ----------------------------------------------
         # Translation
         # ----------------------------------------------
 
-        start = time.perf_counter()
+        translated_entries = []
 
-        translated_text = translate_text(
-            original_text,
-            source_language,
-            target_language,
-        )
+        all_original_text = []
+        all_translation_text = []
+
+        translation_start = time.perf_counter()
+
+        for block_items in grouped_blocks.values():
+
+            if not block_items:
+                continue
+
+            # ------------------------------------------
+            # Sort words in reading order.
+            # ------------------------------------------
+
+            block_items.sort(
+                key=lambda item: (
+                    item.get("top", 0),
+                    item.get("left", 0),
+                )
+            )
+
+            # ------------------------------------------
+            # Build block text.
+            # ------------------------------------------
+
+            block_text = " ".join(
+                item["text"]
+                for item in block_items
+                if item["text"].strip()
+            ).strip()
+
+            if not block_text:
+                continue
+
+            # ------------------------------------------
+            # Calculate image-local bounding rectangle.
+            # ------------------------------------------
+
+            local_left = min(
+                item["left"]
+                for item in block_items
+            )
+
+            local_top = min(
+                item["top"]
+                for item in block_items
+            )
+
+            local_right = max(
+                item["left"] + item["width"]
+                for item in block_items
+            )
+
+            local_bottom = max(
+                item["top"] + item["height"]
+                for item in block_items
+            )
+
+            # ------------------------------------------
+            # Convert to Windows desktop coordinates.
+            # ------------------------------------------
+
+            desktop_left = (
+                origin_left
+                + local_left
+            )
+
+            desktop_top = (
+                origin_top
+                + local_top
+            )
+
+            desktop_width = (
+                local_right
+                - local_left
+            )
+
+            desktop_height = (
+                local_bottom
+                - local_top
+            )
+
+            # ------------------------------------------
+            # Translate this text block.
+            # ------------------------------------------
+
+            translated_text = translate_text(
+                block_text,
+                source_language,
+                target_language,
+            )
+
+            if translated_text is None:
+
+                translated_text = ""
+
+            translated_text = str(
+                translated_text
+            ).strip()
+
+            translated_entries.append(
+                {
+                    "bounds": (
+                        desktop_left,
+                        desktop_top,
+                        desktop_width,
+                        desktop_height,
+                    ),
+                    "original": block_text,
+                    "translation": translated_text,
+                }
+            )
+
+            all_original_text.append(
+                block_text
+            )
+
+            all_translation_text.append(
+                translated_text
+            )
 
         translation_time = (
             time.perf_counter()
-            - start
+            - translation_start
         )
 
         print(
@@ -250,10 +448,22 @@ class ControllerImagePipeline:
         )
 
         # ----------------------------------------------
+        # Combined text
+        # ----------------------------------------------
+
+        original_text = "\n".join(
+            all_original_text
+        ).strip()
+
+        translated_text = "\n".join(
+            all_translation_text
+        ).strip()
+
+        # ----------------------------------------------
         # History
         # ----------------------------------------------
 
-        start = time.perf_counter()
+        history_start = time.perf_counter()
 
         history_file = save_translation(
             original_text,
@@ -264,13 +474,17 @@ class ControllerImagePipeline:
 
         history_time = (
             time.perf_counter()
-            - start
+            - history_start
         )
 
         print(
             f"History     : "
             f"{history_time:.3f} sec"
         )
+
+        # ----------------------------------------------
+        # Total
+        # ----------------------------------------------
 
         total_time = (
             time.perf_counter()
@@ -284,10 +498,44 @@ class ControllerImagePipeline:
             f"{total_time:.3f} sec\n"
         )
 
+        # ----------------------------------------------
+        # Debug positional information
+        # ----------------------------------------------
+
+        print(
+            f"Translated Regions : "
+            f"{len(translated_entries)}"
+        )
+
+        for index, entry in enumerate(
+            translated_entries,
+            start=1,
+        ):
+
+            print(
+                f"[{index:03d}] "
+                f"Bounds={entry['bounds']}"
+            )
+
+            print(
+                f"       Original   : "
+                f"{entry['original'][:100]}"
+            )
+
+            print(
+                f"       Translation: "
+                f"{entry['translation'][:100]}"
+            )
+
+        # ----------------------------------------------
+        # Result
+        # ----------------------------------------------
+
         return {
             "status": "success",
             "original": original_text,
             "translation": translated_text,
+            "entries": translated_entries,
             "history_file": history_file,
             "ocr_language": ocr_languages,
             "source_language": source_language,
