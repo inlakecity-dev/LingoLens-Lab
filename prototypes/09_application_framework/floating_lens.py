@@ -15,14 +15,18 @@ It only:
 - Determines its current desktop position and dimensions.
 - Queries the TranslationMap for visible translations.
 - Renders the appropriate translation.
+- Refreshes when the TranslationMap actually changes.
 """
 
+import ctypes
 import tkinter as tk
 
 from theme import (
     register_widget,
     unregister_widget,
 )
+
+from logger import logger
 
 
 class FloatingLensWindow:
@@ -32,6 +36,8 @@ class FloatingLensWindow:
     The lens acts only as a viewport over the
     TranslationMap.
     """
+
+    MODULE = "LENS"
 
     def __init__(
         self,
@@ -50,6 +56,9 @@ class FloatingLensWindow:
 
         self._drag_x = 0
         self._drag_y = 0
+
+        self._map_listener_registered = False
+        self._map_refresh_pending = False
 
         self.create_window()
         self.create_widgets()
@@ -87,14 +96,247 @@ class FloatingLensWindow:
         )
 
     # --------------------------------------------------
+    # Desktop Duplication Exclusion
+    # --------------------------------------------------
+
+    def _exclude_from_desktop_duplication(self):
+        """
+        Exclude the visible Floating Lens top-level
+        window from Windows Desktop Duplication.
+
+        The exclusion is intentionally applied only
+        after the Floating Lens has been made visible.
+
+        The desktop underneath the Floating Lens remains
+        part of the observable desktop source.
+        """
+
+        if self.window is None:
+            return
+
+        try:
+
+            self.window.update_idletasks()
+            self.window.update()
+
+            #
+            # Tkinter's HWND.
+            #
+
+            tk_hwnd = int(
+                self.window.winfo_id()
+            )
+
+            logger.info(
+                self.MODULE,
+                "Floating Lens Tk HWND: "
+                f"{tk_hwnd}"
+            )
+
+            if not tk_hwnd:
+
+                logger.error(
+                    self.MODULE,
+                    "Desktop Duplication exclusion failed: "
+                    "invalid Tk HWND."
+                )
+
+                return
+
+            user32 = ctypes.WinDLL(
+                "user32",
+                use_last_error=True,
+            )
+
+            #
+            # Resolve the native top-level/root HWND.
+            #
+
+            get_ancestor = user32.GetAncestor
+
+            get_ancestor.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            ]
+
+            get_ancestor.restype = ctypes.c_void_p
+
+            GA_ROOT = 2
+
+            root_hwnd_raw = get_ancestor(
+                ctypes.c_void_p(tk_hwnd),
+                GA_ROOT,
+            )
+
+            root_hwnd = (
+                int(root_hwnd_raw)
+                if root_hwnd_raw
+                else 0
+            )
+
+            logger.info(
+                self.MODULE,
+                "Floating Lens root HWND: "
+                f"{root_hwnd}"
+            )
+
+            if not root_hwnd:
+
+                logger.error(
+                    self.MODULE,
+                    "Desktop Duplication exclusion failed: "
+                    "unable to resolve native root HWND."
+                )
+
+                return
+
+            #
+            # Verify the root HWND.
+            #
+
+            is_window = user32.IsWindow
+
+            is_window.argtypes = [
+                ctypes.c_void_p,
+            ]
+
+            is_window.restype = ctypes.c_int
+
+            valid = bool(
+                is_window(
+                    ctypes.c_void_p(root_hwnd)
+                )
+            )
+
+            logger.info(
+                self.MODULE,
+                "Floating Lens root HWND IsWindow: "
+                f"{valid}"
+            )
+
+            if not valid:
+
+                logger.error(
+                    self.MODULE,
+                    "Desktop Duplication exclusion failed: "
+                    "resolved root HWND is invalid."
+                )
+
+                return
+
+            #
+            # WCA_EXCLUDED_FROM_DDA
+            #
+
+            WCA_EXCLUDED_FROM_DDA = 24
+
+            class WINDOWCOMPOSITIONATTRIBDATA(
+                ctypes.Structure
+            ):
+                _fields_ = [
+                    (
+                        "Attrib",
+                        ctypes.c_uint32,
+                    ),
+                    (
+                        "pvData",
+                        ctypes.c_void_p,
+                    ),
+                    (
+                        "cbData",
+                        ctypes.c_size_t,
+                    ),
+                ]
+
+            excluded = ctypes.c_int(1)
+
+            data = WINDOWCOMPOSITIONATTRIBDATA(
+                Attrib=WCA_EXCLUDED_FROM_DDA,
+                pvData=ctypes.cast(
+                    ctypes.pointer(excluded),
+                    ctypes.c_void_p,
+                ),
+                cbData=ctypes.sizeof(
+                    excluded
+                ),
+            )
+
+            try:
+
+                set_window_composition_attribute = (
+                    user32.SetWindowCompositionAttribute
+                )
+
+            except AttributeError:
+
+                logger.error(
+                    self.MODULE,
+                    "Desktop Duplication exclusion failed: "
+                    "SetWindowCompositionAttribute is "
+                    "not available."
+                )
+
+                return
+
+            set_window_composition_attribute.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(
+                    WINDOWCOMPOSITIONATTRIBDATA
+                ),
+            ]
+
+            set_window_composition_attribute.restype = (
+                ctypes.c_int
+            )
+
+            ctypes.set_last_error(0)
+
+            result = set_window_composition_attribute(
+                ctypes.c_void_p(root_hwnd),
+                ctypes.byref(data),
+            )
+
+            error_code = ctypes.get_last_error()
+
+            logger.info(
+                self.MODULE,
+                "Desktop Duplication exclusion request: "
+                f"HWND={root_hwnd}, "
+                f"attribute={WCA_EXCLUDED_FROM_DDA}, "
+                f"result={result}, "
+                f"last_error={error_code}"
+            )
+
+            if result:
+
+                logger.info(
+                    self.MODULE,
+                    "Floating Lens successfully configured "
+                    "for Desktop Duplication exclusion."
+                )
+
+            else:
+
+                logger.error(
+                    self.MODULE,
+                    "Windows rejected the Floating Lens "
+                    "Desktop Duplication exclusion request. "
+                    f"last_error={error_code}"
+                )
+
+        except Exception as error:
+
+            logger.error(
+                self.MODULE,
+                "Desktop Duplication exclusion "
+                f"configuration failed: {error}"
+            )
+
+    # --------------------------------------------------
     # Widgets
     # --------------------------------------------------
 
     def create_widgets(self):
-
-        #
-        # Title Bar
-        #
 
         self.title_bar = tk.Frame(
             self.window,
@@ -133,10 +375,6 @@ class FloatingLensWindow:
             pady=4
         )
 
-        #
-        # Main Content
-        #
-
         self.content = tk.Frame(
             self.window
         )
@@ -159,10 +397,6 @@ class FloatingLensWindow:
             padx=20,
             pady=20
         )
-
-        #
-        # Status Bar
-        #
 
         self.status_bar = tk.Frame(
             self.window,
@@ -196,10 +430,6 @@ class FloatingLensWindow:
             side="left"
         )
 
-        #
-        # Drag Events
-        #
-
         self.title_bar.bind(
             "<ButtonPress-1>",
             self.start_move
@@ -225,30 +455,37 @@ class FloatingLensWindow:
     # --------------------------------------------------
 
     def show(self):
-        """
-        Display the Floating Lens.
 
-        The lens does NOT capture the desktop.
-
-        It determines its viewport bounds and queries
-        the TranslationMap for translated regions that
-        intersect the viewport.
-        """
+        if self.is_open:
+            return
 
         self.is_open = True
 
         self.lens_controller.start()
+
+        self.register_translation_map_listener()
 
         self.window.deiconify()
 
         self.window.update_idletasks()
         self.window.update()
 
+        #
+        # IMPORTANT:
+        #
+        # Apply Desktop Duplication exclusion only
+        # after the Floating Lens is actually visible.
+        #
+
+        self._exclude_from_desktop_duplication()
+
         self.update_viewport()
 
     def hide(self):
 
         self.is_open = False
+
+        self.unregister_translation_map_listener()
 
         self.lens_controller.stop()
 
@@ -266,17 +503,97 @@ class FloatingLensWindow:
         self.hide()
 
     # --------------------------------------------------
+    # TranslationMap Listener
+    # --------------------------------------------------
+
+    def get_translation_map(self):
+
+        controller = getattr(
+            self.lens_controller,
+            "controller",
+            None,
+        )
+
+        if controller is None:
+            return None
+
+        return getattr(
+            controller,
+            "translation_map",
+            None,
+        )
+
+    def register_translation_map_listener(self):
+
+        if self._map_listener_registered:
+            return
+
+        translation_map = (
+            self.get_translation_map()
+        )
+
+        if translation_map is None:
+            return
+
+        translation_map.add_change_listener(
+            self.on_translation_map_changed
+        )
+
+        self._map_listener_registered = True
+
+    def unregister_translation_map_listener(self):
+
+        if not self._map_listener_registered:
+            return
+
+        translation_map = (
+            self.get_translation_map()
+        )
+
+        if translation_map is not None:
+
+            translation_map.remove_change_listener(
+                self.on_translation_map_changed
+            )
+
+        self._map_listener_registered = False
+        self._map_refresh_pending = False
+
+    def on_translation_map_changed(self):
+
+        if not self.is_open:
+            return
+
+        if self._map_refresh_pending:
+            return
+
+        self._map_refresh_pending = True
+
+        try:
+
+            self.window.after(
+                0,
+                self._refresh_after_map_change
+            )
+
+        except tk.TclError:
+
+            self._map_refresh_pending = False
+
+    def _refresh_after_map_change(self):
+
+        self._map_refresh_pending = False
+
+        if not self.is_open:
+            return
+
+        self.update_viewport()
+
+    # --------------------------------------------------
     # TranslationMap Viewport
     # --------------------------------------------------
 
     def update_viewport(self):
-        """
-        Query the TranslationMap using the current
-        Floating Lens viewport.
-
-        This method performs no capture, OCR or
-        translation.
-        """
 
         if not self.is_open:
             return
@@ -294,10 +611,6 @@ class FloatingLensWindow:
         )
 
     def render_entries(self, entries):
-        """
-        Render translations returned by the
-        TranslationMap.
-        """
 
         if not entries:
 
@@ -312,10 +625,6 @@ class FloatingLensWindow:
 
             return
 
-        #
-        # For the current single-label UI, display
-        # the visible translated regions together.
-        #
         translations = []
 
         for entry in entries:
@@ -420,13 +729,6 @@ class FloatingLensWindow:
             f"+{x}+{y}"
         )
 
-        #
-        # The lens has moved.
-        #
-        # Query the TranslationMap using the
-        # new viewport position.
-        #
-
         self.window.update_idletasks()
 
         self.update_viewport()
@@ -438,15 +740,6 @@ class FloatingLensWindow:
     def get_viewport_bounds(
         self,
     ) -> tuple[int, int, int, int]:
-        """
-        Return the desktop region occupied by the
-        Floating Lens translation viewport.
-
-        Returns
-        -------
-        tuple
-            (left, top, width, height)
-        """
 
         self.window.update_idletasks()
 
@@ -527,6 +820,8 @@ class FloatingLensWindow:
     # --------------------------------------------------
 
     def destroy(self):
+
+        self.unregister_translation_map_listener()
 
         unregister_widget(self)
 

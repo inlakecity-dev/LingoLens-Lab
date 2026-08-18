@@ -3,6 +3,7 @@ menu.py
 
 Creates the application menu bar.
 """
+
 from theme import apply_theme
 import tkinter as tk
 
@@ -16,9 +17,16 @@ from logger import logger
 
 class MenuBar:
 
-    def __init__(self, root, controller, app_settings):
+    def __init__(
+        self,
+        root,
+        window,
+        controller,
+        app_settings
+    ):
 
         self.root = root
+        self.window = window
         self.controller = controller
         self.app_settings = app_settings
 
@@ -35,7 +43,7 @@ class MenuBar:
         self.target_language = tk.StringVar(
             value=self.app_settings.target_language
         )
-                
+
         self.theme = tk.StringVar(
             value=self.app_settings.theme
         )
@@ -61,7 +69,10 @@ class MenuBar:
 
     def create_file_menu(self):
 
-        file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        file_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
         file_menu.add_command(
             label="New Session",
@@ -138,9 +149,8 @@ class MenuBar:
             menu=lens_menu
         )
 
-
     # --------------------------------------------------
-    # Lens Commands
+    # LENS COMMANDS
     # --------------------------------------------------
 
     def open_floating_lens(self):
@@ -150,7 +160,7 @@ class MenuBar:
             "Open Floating Lens selected"
         )
 
-        self.controller.toggle_floating_lens()
+        self.window.toggle_floating_lens()
 
     # --------------------------------------------------
     # TRANSLATE MENU
@@ -158,13 +168,19 @@ class MenuBar:
 
     def create_translate_menu(self):
 
-        translate_menu = tk.Menu(self.menu_bar, tearoff=0)
+        translate_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
-        selection_menu = tk.Menu(translate_menu, tearoff=0)
+        selection_menu = tk.Menu(
+            translate_menu,
+            tearoff=0
+        )
 
         selection_menu.add_command(
             label="Rectangle",
-            command=self.controller.start_rectangle_translation
+            command=self.window.start_rectangle_translation
         )
 
         selection_menu.add_command(
@@ -241,22 +257,43 @@ class MenuBar:
 
     def create_tools_menu(self):
 
-        tools_menu = tk.Menu(self.menu_bar, tearoff=0)
+        tools_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
-        settings_menu = tk.Menu(tools_menu, tearoff=0)
-        ocr_menu = tk.Menu(settings_menu, tearoff=0)
-        source_menu = tk.Menu(settings_menu, tearoff=0)
-        target_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu = tk.Menu(
+            tools_menu,
+            tearoff=0
+        )
+
+        ocr_menu = tk.Menu(
+            settings_menu,
+            tearoff=0
+        )
+
+        source_menu = tk.Menu(
+            settings_menu,
+            tearoff=0
+        )
+
+        target_menu = tk.Menu(
+            settings_menu,
+            tearoff=0
+        )
 
         # OCR Languages
 
         for language in OCR_LANGUAGE_MAP:
 
             enabled = (
-                language in self.app_settings.enabled_ocr_languages
+                language
+                in self.app_settings.enabled_ocr_languages
             )
 
-            variable = tk.BooleanVar(value=enabled)
+            variable = tk.BooleanVar(
+                value=enabled
+            )
 
             self.ocr_language_vars[language] = variable
 
@@ -333,9 +370,15 @@ class MenuBar:
 
     def create_view_menu(self):
 
-        view_menu = tk.Menu(self.menu_bar, tearoff=0)
+        view_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
-        theme_menu = tk.Menu(view_menu, tearoff=0)
+        theme_menu = tk.Menu(
+            view_menu,
+            tearoff=0
+        )
 
         theme_menu.add_radiobutton(
             label="Light",
@@ -392,7 +435,10 @@ class MenuBar:
 
     def create_help_menu(self):
 
-        help_menu = tk.Menu(self.menu_bar, tearoff=0)
+        help_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=0
+        )
 
         help_menu.add_command(
             label="Documentation",
@@ -444,11 +490,14 @@ class MenuBar:
             if variable.get()
         ]
 
-        self.app_settings.enabled_ocr_languages = enabled_languages
+        self.app_settings.enabled_ocr_languages = (
+            enabled_languages
+        )
 
         logger.info(
             "TOOLS",
-            f"OCR Languages updated: {', '.join(enabled_languages)}"
+            f"OCR Languages updated: "
+            f"{', '.join(enabled_languages)}"
         )
 
     def update_source_language(self):
@@ -459,7 +508,8 @@ class MenuBar:
 
         logger.info(
             "TOOLS",
-            f"Source Language: {self.source_language.get()}"
+            f"Source Language: "
+            f"{self.source_language.get()}"
         )
 
     def update_target_language(self):
@@ -470,12 +520,15 @@ class MenuBar:
 
         logger.info(
             "TOOLS",
-            f"Target Language: {self.target_language.get()}"
+            f"Target Language: "
+            f"{self.target_language.get()}"
         )
-        
+
     def update_theme(self):
 
-        self.app_settings.theme = self.theme.get()
+        self.app_settings.theme = (
+            self.theme.get()
+        )
 
         apply_theme(
             self.root,
@@ -484,8 +537,9 @@ class MenuBar:
 
         logger.info(
             "VIEW",
-            f"{self.app_settings.theme.title()} Theme selected"
-        )    
+            f"{self.app_settings.theme.title()} "
+            "Theme selected"
+        )
 
     # --------------------------------------------------
     # WINDOW ACTIONS
@@ -498,7 +552,7 @@ class MenuBar:
             "About selected"
         )
 
-        self.controller.show_about()
+        self.window.show_about()
 
     def exit_application(self):
 
@@ -513,9 +567,16 @@ class MenuBar:
     # MENU ACTIONS
     # --------------------------------------------------
 
-    def menu_action(self, module, message):
+    def menu_action(
+        self,
+        module,
+        message
+    ):
 
-        logger.info(module, message)
+        logger.info(
+            module,
+            message
+        )
 
     # --------------------------------------------------
     # LENS ACTIONS
@@ -530,9 +591,13 @@ class MenuBar:
                 "Live Translation Enabled"
             )
 
+            self.controller.start_live_mode()
+
         else:
 
             logger.info(
                 "LENS",
                 "Live Translation Disabled"
             )
+
+            self.controller.stop_live_mode()

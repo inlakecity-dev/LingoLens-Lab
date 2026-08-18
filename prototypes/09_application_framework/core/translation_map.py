@@ -16,6 +16,7 @@ Desktop Observation and the Floating Lens.
 
 from dataclasses import dataclass
 from itertools import count
+from typing import Callable
 
 
 # ------------------------------------------------------------
@@ -113,6 +114,7 @@ class TranslationMap:
     - Store virtual desktop metadata.
     - Store physical monitor layout.
     - Track desktop generations.
+    - Notify listeners when translation data changes.
 
     This class does NOT:
     - Capture the desktop.
@@ -140,6 +142,7 @@ class TranslationMap:
         # a monitor is positioned left or above the primary
         # monitor.
         #
+
         self._desktop_bounds = (
             0,
             0,
@@ -161,6 +164,82 @@ class TranslationMap:
         #
 
         self._entries: list[TranslationEntry] = []
+
+        #
+        # Change listeners
+        #
+        # Listeners receive no arguments.
+        #
+        # The Floating Lens can register itself here and
+        # refresh only when the TranslationMap actually
+        # changes.
+        #
+
+        self._change_listeners: list[
+            Callable[[], None]
+        ] = []
+
+    # --------------------------------------------------------
+    # Change Notifications
+    # --------------------------------------------------------
+
+    def add_change_listener(
+        self,
+        listener: Callable[[], None],
+    ):
+        """
+        Register a listener for TranslationMap changes.
+
+        Parameters
+        ----------
+        listener : callable
+            Function called whenever translation entries
+            are added, removed or cleared.
+
+        Duplicate listeners are ignored.
+        """
+
+        if listener in self._change_listeners:
+            return
+
+        self._change_listeners.append(
+            listener
+        )
+
+    def remove_change_listener(
+        self,
+        listener: Callable[[], None],
+    ):
+        """
+        Remove a previously registered change listener.
+        """
+
+        if listener not in self._change_listeners:
+            return
+
+        self._change_listeners.remove(
+            listener
+        )
+
+    def _notify_change(self):
+        """
+        Notify all registered listeners that the
+        TranslationMap has changed.
+
+        Listener failures do not prevent the TranslationMap
+        from continuing to operate.
+        """
+
+        for listener in self._change_listeners.copy():
+
+            try:
+
+                listener()
+
+            except Exception:
+                # Listener/UI errors must not break the
+                # TranslationMap itself.
+                continue
 
     # --------------------------------------------------------
     # Desktop Metadata
@@ -310,7 +389,12 @@ class TranslationMap:
         Remove every translation entry.
         """
 
+        if not self._entries:
+            return
+
         self._entries.clear()
+
+        self._notify_change()
 
     def add_entry(
         self,
@@ -331,6 +415,8 @@ class TranslationMap:
             )
         )
 
+        self._notify_change()
+
     def update_region(
         self,
         bounds,
@@ -342,7 +428,9 @@ class TranslationMap:
         the supplied desktop region.
         """
 
-        self.remove_entries_in_region(bounds)
+        self.remove_entries_in_region(
+            bounds
+        )
 
         self.add_entry(
             bounds,
@@ -368,7 +456,9 @@ class TranslationMap:
 
         for entry in self._entries:
 
-            e_left, e_top, e_width, e_height = entry.bounds
+            e_left, e_top, e_width, e_height = (
+                entry.bounds
+            )
 
             e_right = e_left + e_width
             e_bottom = e_top + e_height
@@ -383,7 +473,16 @@ class TranslationMap:
             if not intersects:
                 remaining.append(entry)
 
+        #
+        # Only notify when the map actually changed.
+        #
+
+        if len(remaining) == len(self._entries):
+            return
+
         self._entries = remaining
+
+        self._notify_change()
 
     # --------------------------------------------------------
     # Queries
@@ -414,7 +513,9 @@ class TranslationMap:
 
         for entry in self._entries:
 
-            e_left, e_top, e_width, e_height = entry.bounds
+            e_left, e_top, e_width, e_height = (
+                entry.bounds
+            )
 
             e_right = e_left + e_width
             e_bottom = e_top + e_height

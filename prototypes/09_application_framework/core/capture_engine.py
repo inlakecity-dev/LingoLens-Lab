@@ -15,6 +15,7 @@ This module contains no OCR, Translation or UI logic.
 import atexit
 import ctypes
 import os
+import threading
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -247,6 +248,30 @@ _desktop_bounds: tuple[int, int, int, int] = (
 
 
 # ------------------------------------------------------------
+# Native engine synchronization
+# ------------------------------------------------------------
+#
+# DesktopVisionEngine owns stateful DXGI Desktop Duplication
+# sessions. The same native engine is used by multiple Python
+# consumers:
+#
+#     DesktopObserver
+#         -> capture_desktop_changes()
+#
+#     ControllerPipeline
+#         -> capture_fullscreen()
+#
+# These operations must never enter the native engine
+# concurrently.
+#
+# RLock is used because some protected functions call other
+# protected functions internally.
+# ------------------------------------------------------------
+
+_native_lock = threading.RLock()
+
+
+# ------------------------------------------------------------
 # Native bridge discovery
 # ------------------------------------------------------------
 
@@ -440,124 +465,148 @@ def _ensure_native_engine() -> None:
     global _bridge_dll
     global _engine_initialized
 
-    if _engine_initialized:
-        return
+    with _native_lock:
 
-    bridge_path = _find_bridge_dll()
+        if _engine_initialized:
+            return
 
-    _bridge_dll = ctypes.WinDLL(
-        str(bridge_path)
-    )
+        bridge_path = _find_bridge_dll()
 
-    # --------------------------------------------------------
-    # Image functions
-    # --------------------------------------------------------
-
-    _bridge_dll.DVEPB_Initialize.argtypes = []
-
-    _bridge_dll.DVEPB_Initialize.restype = (
-        ctypes.c_bool
-    )
-
-    _bridge_dll.DVEPB_Shutdown.argtypes = []
-
-    _bridge_dll.DVEPB_Shutdown.restype = None
-
-    _bridge_dll.DVEPB_CaptureDesktop.argtypes = [
-        ctypes.POINTER(DVEPB_Image)
-    ]
-
-    _bridge_dll.DVEPB_CaptureDesktop.restype = (
-        ctypes.c_bool
-    )
-
-    _bridge_dll.DVEPB_FreeImage.argtypes = [
-        ctypes.POINTER(DVEPB_Image)
-    ]
-
-    _bridge_dll.DVEPB_FreeImage.restype = None
-
-    # --------------------------------------------------------
-    # Output metadata functions
-    # --------------------------------------------------------
-
-    _bridge_dll.DVEPB_GetOutputCount.argtypes = []
-
-    _bridge_dll.DVEPB_GetOutputCount.restype = (
-        ctypes.c_uint32
-    )
-
-    _bridge_dll.DVEPB_GetOutput.argtypes = [
-        ctypes.c_uint32,
-        ctypes.POINTER(DVEPB_Output),
-    ]
-
-    _bridge_dll.DVEPB_GetOutput.restype = (
-        ctypes.c_bool
-    )
-
-    # --------------------------------------------------------
-    # Desktop dirty-region functions
-    # --------------------------------------------------------
-
-    _bridge_dll.DVEPB_GetDirtyRegionCount.argtypes = []
-
-    _bridge_dll.DVEPB_GetDirtyRegionCount.restype = (
-        ctypes.c_uint32
-    )
-
-    _bridge_dll.DVEPB_GetDirtyRegion.argtypes = [
-        ctypes.c_uint32,
-        ctypes.POINTER(DVEPB_DirtyRegion),
-    ]
-
-    _bridge_dll.DVEPB_GetDirtyRegion.restype = (
-        ctypes.c_bool
-    )
-
-    # --------------------------------------------------------
-    # Desktop move-region functions
-    # --------------------------------------------------------
-
-    _bridge_dll.DVEPB_GetMoveRegionCount.argtypes = []
-
-    _bridge_dll.DVEPB_GetMoveRegionCount.restype = (
-        ctypes.c_uint32
-    )
-
-    _bridge_dll.DVEPB_GetMoveRegion.argtypes = [
-        ctypes.c_uint32,
-        ctypes.POINTER(DVEPB_MoveRegion),
-    ]
-
-    _bridge_dll.DVEPB_GetMoveRegion.restype = (
-        ctypes.c_bool
-    )
-
-    # --------------------------------------------------------
-    # Initialize native engine.
-    # --------------------------------------------------------
-
-    if not _bridge_dll.DVEPB_Initialize():
-        _bridge_dll = None
-
-        raise RuntimeError(
-            "DesktopVisionEngine initialization failed."
+        _bridge_dll = ctypes.WinDLL(
+            str(bridge_path)
         )
 
-    try:
+        # ----------------------------------------------------
+        # Image functions
+        # ----------------------------------------------------
 
-        _load_desktop_metadata()
+        _bridge_dll.DVEPB_Initialize.argtypes = []
 
-    except Exception:
+        _bridge_dll.DVEPB_Initialize.restype = (
+            ctypes.c_bool
+        )
 
-        _bridge_dll.DVEPB_Shutdown()
+        _bridge_dll.DVEPB_Shutdown.argtypes = []
 
-        _bridge_dll = None
+        _bridge_dll.DVEPB_Shutdown.restype = None
 
-        raise
+        _bridge_dll.DVEPB_CaptureDesktop.argtypes = [
+            ctypes.POINTER(DVEPB_Image)
+        ]
 
-    _engine_initialized = True
+        _bridge_dll.DVEPB_CaptureDesktop.restype = (
+            ctypes.c_bool
+        )
+
+        # ----------------------------------------------------
+        # Unified Desktop State Acquisition
+        # ----------------------------------------------------
+
+        _bridge_dll.DVEPB_CaptureDesktopState.argtypes = [
+            ctypes.POINTER(DVEPB_Image)
+        ]
+
+        _bridge_dll.DVEPB_CaptureDesktopState.restype = (
+            ctypes.c_bool
+        )
+
+        _bridge_dll.DVEPB_FreeImage.argtypes = [
+            ctypes.POINTER(DVEPB_Image)
+        ]
+
+        _bridge_dll.DVEPB_FreeImage.restype = None
+
+        # ----------------------------------------------------
+        # Desktop Change Observation
+        # ----------------------------------------------------
+
+        _bridge_dll.DVEPB_CaptureDesktopChanges.argtypes = []
+
+        _bridge_dll.DVEPB_CaptureDesktopChanges.restype = (
+            ctypes.c_bool
+        )
+
+        # ----------------------------------------------------
+        # Output metadata functions
+        # ----------------------------------------------------
+
+        _bridge_dll.DVEPB_GetOutputCount.argtypes = []
+
+        _bridge_dll.DVEPB_GetOutputCount.restype = (
+            ctypes.c_uint32
+        )
+
+        _bridge_dll.DVEPB_GetOutput.argtypes = [
+            ctypes.c_uint32,
+            ctypes.POINTER(DVEPB_Output),
+        ]
+
+        _bridge_dll.DVEPB_GetOutput.restype = (
+            ctypes.c_bool
+        )
+
+        # ----------------------------------------------------
+        # Desktop dirty-region functions
+        # ----------------------------------------------------
+
+        _bridge_dll.DVEPB_GetDirtyRegionCount.argtypes = []
+
+        _bridge_dll.DVEPB_GetDirtyRegionCount.restype = (
+            ctypes.c_uint32
+        )
+
+        _bridge_dll.DVEPB_GetDirtyRegion.argtypes = [
+            ctypes.c_uint32,
+            ctypes.POINTER(DVEPB_DirtyRegion),
+        ]
+
+        _bridge_dll.DVEPB_GetDirtyRegion.restype = (
+            ctypes.c_bool
+        )
+
+        # ----------------------------------------------------
+        # Desktop move-region functions
+        # ----------------------------------------------------
+
+        _bridge_dll.DVEPB_GetMoveRegionCount.argtypes = []
+
+        _bridge_dll.DVEPB_GetMoveRegionCount.restype = (
+            ctypes.c_uint32
+        )
+
+        _bridge_dll.DVEPB_GetMoveRegion.argtypes = [
+            ctypes.c_uint32,
+            ctypes.POINTER(DVEPB_MoveRegion),
+        ]
+
+        _bridge_dll.DVEPB_GetMoveRegion.restype = (
+            ctypes.c_bool
+        )
+
+        # ----------------------------------------------------
+        # Initialize native engine.
+        # ----------------------------------------------------
+
+        if not _bridge_dll.DVEPB_Initialize():
+            _bridge_dll = None
+
+            raise RuntimeError(
+                "DesktopVisionEngine initialization failed."
+            )
+
+        try:
+
+            _load_desktop_metadata()
+
+        except Exception:
+
+            _bridge_dll.DVEPB_Shutdown()
+
+            _bridge_dll = None
+
+            raise
+
+        _engine_initialized = True
 
 
 # ------------------------------------------------------------
@@ -576,23 +625,25 @@ def shutdown_capture_engine() -> None:
     global _desktop_monitors
     global _desktop_bounds
 
-    if (
-        _bridge_dll is not None
-        and _engine_initialized
-    ):
-        _bridge_dll.DVEPB_Shutdown()
+    with _native_lock:
 
-    _bridge_dll = None
-    _engine_initialized = False
+        if (
+            _bridge_dll is not None
+            and _engine_initialized
+        ):
+            _bridge_dll.DVEPB_Shutdown()
 
-    _desktop_monitors = []
+        _bridge_dll = None
+        _engine_initialized = False
 
-    _desktop_bounds = (
-        0,
-        0,
-        0,
-        0,
-    )
+        _desktop_monitors = []
+
+        _desktop_bounds = (
+            0,
+            0,
+            0,
+            0,
+        )
 
 
 atexit.register(
@@ -618,7 +669,8 @@ def get_monitors() -> list[DesktopMonitor]:
 
     _ensure_native_engine()
 
-    return _desktop_monitors.copy()
+    with _native_lock:
+        return _desktop_monitors.copy()
 
 
 def get_desktop_bounds() -> tuple[int, int, int, int]:
@@ -636,31 +688,20 @@ def get_desktop_bounds() -> tuple[int, int, int, int]:
 
     _ensure_native_engine()
 
-    return _desktop_bounds
+    with _native_lock:
+        return _desktop_bounds
 
 
 # ------------------------------------------------------------
 # Desktop Change Metadata
 # ------------------------------------------------------------
 
-def get_last_desktop_changes() -> dict:
+def _get_last_desktop_changes_locked() -> dict:
     """
-    Return desktop change metadata from the most recent
-    native desktop capture.
+    Read desktop change metadata.
 
-    The native DesktopVisionEngine updates its dirty and
-    move regions whenever DVEPB_CaptureDesktop() is called.
-
-    Returns
-    -------
-    dict
-        {
-            "dirty_regions": list[DesktopChangeRegion],
-            "move_regions": list[DesktopMoveRegion],
-        }
+    The caller must already hold _native_lock.
     """
-
-    _ensure_native_engine()
 
     dirty_regions = []
 
@@ -750,19 +791,14 @@ def get_last_desktop_changes() -> dict:
     }
 
 
-# ------------------------------------------------------------
-# Desktop Observation Capture
-# ------------------------------------------------------------
-
-def capture_desktop_changes() -> dict:
+def get_last_desktop_changes() -> dict:
     """
-    Perform one native desktop acquisition and return
-    the desktop change metadata produced by that capture.
+    Return desktop change metadata from the most recent
+    native desktop capture.
 
-    The captured image itself is intentionally not returned.
-
-    This function is intended for DesktopObserver and
-    Live Mode. It does not replace capture_region().
+    The native DesktopVisionEngine updates its dirty and
+    move regions whenever a desktop change observation or
+    desktop image capture is performed.
 
     Returns
     -------
@@ -775,27 +811,225 @@ def capture_desktop_changes() -> dict:
 
     _ensure_native_engine()
 
-    native_image = DVEPB_Image()
+    with _native_lock:
+        return _get_last_desktop_changes_locked()
 
-    try:
 
-        success = _bridge_dll.DVEPB_CaptureDesktop(
-            ctypes.byref(native_image)
+# ------------------------------------------------------------
+# Desktop Observation Capture
+# ------------------------------------------------------------
+
+def capture_desktop_changes() -> dict:
+    """
+    Perform one native desktop observation cycle and return
+    the desktop change metadata produced by that cycle.
+
+    The captured desktop image is NOT requested.
+
+    This function is intended for DesktopObserver and
+    observation-only scenarios.
+
+    It does not replace capture_region(),
+    capture_fullscreen(), or capture_desktop_state().
+    """
+
+    _ensure_native_engine()
+
+    with _native_lock:
+
+        success = (
+            _bridge_dll.DVEPB_CaptureDesktopChanges()
         )
 
         if not success:
             raise RuntimeError(
                 "DesktopVisionEngine failed to "
-                "capture the desktop for observation."
+                "capture desktop changes for observation."
             )
 
-        return get_last_desktop_changes()
+        return _get_last_desktop_changes_locked()
 
-    finally:
 
-        _bridge_dll.DVEPB_FreeImage(
-            ctypes.byref(native_image)
-        )
+# ------------------------------------------------------------
+# Unified Desktop State Capture
+# ------------------------------------------------------------
+
+def capture_desktop_state() -> dict:
+    """
+    Perform one unified native desktop acquisition.
+
+    The native DesktopVisionEngine acquires the desktop once
+    and produces both:
+
+        1. Complete virtual desktop image.
+        2. Desktop-change metadata belonging to that
+           same native acquisition.
+
+    Returns
+    -------
+    dict
+        {
+            "image": PIL.Image.Image,
+            "dirty_regions": list[DesktopChangeRegion],
+            "move_regions": list[DesktopMoveRegion],
+        }
+
+    This is the preferred acquisition path for Live Mode.
+
+    Important
+    ---------
+    This function performs exactly one native desktop
+    acquisition. It does NOT call capture_desktop_changes()
+    after capturing the image.
+    """
+
+    _ensure_native_engine()
+
+    native_image = DVEPB_Image()
+
+    with _native_lock:
+
+        try:
+
+            # ------------------------------------------------
+            # Perform one unified native acquisition.
+            # ------------------------------------------------
+
+            success = (
+                _bridge_dll.DVEPB_CaptureDesktopState(
+                    ctypes.byref(native_image)
+                )
+            )
+
+            if not success:
+                raise RuntimeError(
+                    "DesktopVisionEngine failed to "
+                    "capture unified desktop state."
+                )
+
+            if not native_image.pixels:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned an "
+                    "empty pixel buffer."
+                )
+
+            if native_image.width == 0:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned "
+                    "zero width."
+                )
+
+            if native_image.height == 0:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned "
+                    "zero height."
+                )
+
+            if native_image.bytesPerPixel != 4:
+                raise RuntimeError(
+                    "Unsupported native pixel format: "
+                    f"{native_image.bytesPerPixel} bytes/pixel."
+                )
+
+            expected_bytes = (
+                native_image.width
+                * native_image.height
+                * native_image.bytesPerPixel
+            )
+
+            if native_image.pixelBytes != expected_bytes:
+                raise RuntimeError(
+                    "Native pixel buffer size mismatch: "
+                    f"{native_image.pixelBytes} "
+                    f"(expected {expected_bytes})."
+                )
+
+            # ------------------------------------------------
+            # Verify native image dimensions against the
+            # virtual desktop metadata.
+            # ------------------------------------------------
+
+            (
+                desktop_left,
+                desktop_top,
+                desktop_width,
+                desktop_height,
+            ) = _desktop_bounds
+
+            if native_image.width != desktop_width:
+                raise RuntimeError(
+                    "Native desktop width does not match "
+                    "desktop metadata: "
+                    f"{native_image.width} "
+                    f"(expected {desktop_width})."
+                )
+
+            if native_image.height != desktop_height:
+                raise RuntimeError(
+                    "Native desktop height does not match "
+                    "desktop metadata: "
+                    f"{native_image.height} "
+                    f"(expected {desktop_height})."
+                )
+
+            # ------------------------------------------------
+            # Copy native memory into Python-managed memory.
+            # ------------------------------------------------
+
+            pixel_buffer = ctypes.string_at(
+                native_image.pixels,
+                native_image.pixelBytes,
+            )
+
+            # ------------------------------------------------
+            # Native format is BGRA.
+            # Convert it to RGBA.
+            # ------------------------------------------------
+
+            image = Image.frombuffer(
+                "RGBA",
+                (
+                    native_image.width,
+                    native_image.height,
+                ),
+                pixel_buffer,
+                "raw",
+                "BGRA",
+                0,
+                1,
+            ).copy()
+
+            # ------------------------------------------------
+            # The native engine stores the metadata from the
+            # SAME acquisition in its last-change state.
+            #
+            # Read it before releasing the Python lock, but
+            # still within the same native-engine critical
+            # section.
+            # ------------------------------------------------
+
+            changes = _get_last_desktop_changes_locked()
+
+            return {
+                "image": image,
+                "dirty_regions": changes[
+                    "dirty_regions"
+                ],
+                "move_regions": changes[
+                    "move_regions"
+                ],
+            }
+
+        finally:
+
+            # ------------------------------------------------
+            # Native C++ owns this memory.
+            # Always release it through the bridge.
+            # ------------------------------------------------
+
+            _bridge_dll.DVEPB_FreeImage(
+                ctypes.byref(native_image)
+            )
 
 
 # ------------------------------------------------------------
@@ -868,126 +1102,128 @@ def capture_fullscreen() -> Image.Image:
 
     native_image = DVEPB_Image()
 
-    try:
+    with _native_lock:
 
-        # ----------------------------------------------------
-        # Capture native desktop image.
-        # ----------------------------------------------------
+        try:
 
-        success = _bridge_dll.DVEPB_CaptureDesktop(
-            ctypes.byref(native_image)
-        )
+            # ------------------------------------------------
+            # Capture native desktop image.
+            # ------------------------------------------------
 
-        if not success:
-            raise RuntimeError(
-                "DesktopVisionEngine failed to "
-                "capture the desktop."
+            success = _bridge_dll.DVEPB_CaptureDesktop(
+                ctypes.byref(native_image)
             )
 
-        if not native_image.pixels:
-            raise RuntimeError(
-                "DesktopVisionEngine returned an "
-                "empty pixel buffer."
+            if not success:
+                raise RuntimeError(
+                    "DesktopVisionEngine failed to "
+                    "capture the desktop."
+                )
+
+            if not native_image.pixels:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned an "
+                    "empty pixel buffer."
+                )
+
+            if native_image.width == 0:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned "
+                    "zero width."
+                )
+
+            if native_image.height == 0:
+                raise RuntimeError(
+                    "DesktopVisionEngine returned "
+                    "zero height."
+                )
+
+            if native_image.bytesPerPixel != 4:
+                raise RuntimeError(
+                    "Unsupported native pixel format: "
+                    f"{native_image.bytesPerPixel} bytes/pixel."
+                )
+
+            expected_bytes = (
+                native_image.width
+                * native_image.height
+                * native_image.bytesPerPixel
             )
 
-        if native_image.width == 0:
-            raise RuntimeError(
-                "DesktopVisionEngine returned "
-                "zero width."
-            )
+            if native_image.pixelBytes != expected_bytes:
+                raise RuntimeError(
+                    "Native pixel buffer size mismatch: "
+                    f"{native_image.pixelBytes} "
+                    f"(expected {expected_bytes})."
+                )
 
-        if native_image.height == 0:
-            raise RuntimeError(
-                "DesktopVisionEngine returned "
-                "zero height."
-            )
+            # ------------------------------------------------
+            # Verify native image dimensions against the
+            # virtual desktop metadata.
+            # ------------------------------------------------
 
-        if native_image.bytesPerPixel != 4:
-            raise RuntimeError(
-                "Unsupported native pixel format: "
-                f"{native_image.bytesPerPixel} bytes/pixel."
-            )
-
-        expected_bytes = (
-            native_image.width
-            * native_image.height
-            * native_image.bytesPerPixel
-        )
-
-        if native_image.pixelBytes != expected_bytes:
-            raise RuntimeError(
-                "Native pixel buffer size mismatch: "
-                f"{native_image.pixelBytes} "
-                f"(expected {expected_bytes})."
-            )
-
-        # ----------------------------------------------------
-        # Verify native image dimensions against the
-        # virtual desktop metadata.
-        # ----------------------------------------------------
-
-        (
-            desktop_left,
-            desktop_top,
-            desktop_width,
-            desktop_height,
-        ) = _desktop_bounds
-
-        if native_image.width != desktop_width:
-            raise RuntimeError(
-                "Native desktop width does not match "
-                "desktop metadata: "
-                f"{native_image.width} "
-                f"(expected {desktop_width})."
-            )
-
-        if native_image.height != desktop_height:
-            raise RuntimeError(
-                "Native desktop height does not match "
-                "desktop metadata: "
-                f"{native_image.height} "
-                f"(expected {desktop_height})."
-            )
-
-        # ----------------------------------------------------
-        # Copy native memory into Python-managed memory.
-        # ----------------------------------------------------
-
-        pixel_buffer = ctypes.string_at(
-            native_image.pixels,
-            native_image.pixelBytes,
-        )
-
-        # ----------------------------------------------------
-        # Native format is BGRA.
-        # Convert it to RGBA.
-        # ----------------------------------------------------
-
-        image = Image.frombuffer(
-            "RGBA",
             (
-                native_image.width,
-                native_image.height,
-            ),
-            pixel_buffer,
-            "raw",
-            "BGRA",
-            0,
-            1,
-        ).copy()
+                desktop_left,
+                desktop_top,
+                desktop_width,
+                desktop_height,
+            ) = _desktop_bounds
 
-        return image
+            if native_image.width != desktop_width:
+                raise RuntimeError(
+                    "Native desktop width does not match "
+                    "desktop metadata: "
+                    f"{native_image.width} "
+                    f"(expected {desktop_width})."
+                )
 
-    finally:
+            if native_image.height != desktop_height:
+                raise RuntimeError(
+                    "Native desktop height does not match "
+                    "desktop metadata: "
+                    f"{native_image.height} "
+                    f"(expected {desktop_height})."
+                )
 
-        # ----------------------------------------------------
-        # Native C++ owns this memory.
-        # Always release it through the bridge.
-        # ----------------------------------------------------
+            # ------------------------------------------------
+            # Copy native memory into Python-managed memory.
+            # ------------------------------------------------
 
-        _bridge_dll.DVEPB_FreeImage(
-            ctypes.byref(native_image)
-        )
+            pixel_buffer = ctypes.string_at(
+                native_image.pixels,
+                native_image.pixelBytes,
+            )
+
+            # ------------------------------------------------
+            # Native format is BGRA.
+            # Convert it to RGBA.
+            # ------------------------------------------------
+
+            image = Image.frombuffer(
+                "RGBA",
+                (
+                    native_image.width,
+                    native_image.height,
+                ),
+                pixel_buffer,
+                "raw",
+                "BGRA",
+                0,
+                1,
+            ).copy()
+
+            return image
+
+        finally:
+
+            # ------------------------------------------------
+            # Native C++ owns this memory.
+            # Always release it through the bridge.
+            # ------------------------------------------------
+
+            _bridge_dll.DVEPB_FreeImage(
+                ctypes.byref(native_image)
+            )
 
 
 # ------------------------------------------------------------
@@ -1005,25 +1241,6 @@ def capture_region(
 
     The complete virtual desktop is captured by the native
     engine first. Python then crops the requested region.
-
-    Parameters
-    ----------
-    left : int
-        Left desktop coordinate.
-
-    top : int
-        Top desktop coordinate.
-
-    right : int
-        Right desktop coordinate.
-
-    bottom : int
-        Bottom desktop coordinate.
-
-    Returns
-    -------
-    CapturedRegion
-        Captured desktop region and its coordinates.
     """
 
     if right <= left:
@@ -1090,21 +1307,6 @@ def capture_region(
     # --------------------------------------------------------
     # Convert Windows desktop coordinates into image
     # coordinates.
-    #
-    # Example:
-    #
-    # Virtual desktop:
-    #     left = -1920
-    #
-    # Requested region:
-    #     left = -1500
-    #
-    # Image coordinate:
-    #     -1500 - (-1920) = 420
-    #
-    # This is why TranslationMap coordinates remain real
-    # Windows coordinates while the Pillow image uses
-    # zero-based coordinates.
     # --------------------------------------------------------
 
     crop_left = (

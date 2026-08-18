@@ -64,6 +64,7 @@ class MainWindow:
         self.menu_bar = MenuBar(
             self.root,
             self,
+            self.controller,
             self.app_settings
         )
 

@@ -3,11 +3,13 @@ core/controller_pipeline.py
 
 Controller Image Pipeline
 
-Provides the shared image capture pipeline used by the Controller.
+Provides the shared image capture and image-processing
+pipeline used by the Controller.
 
 ## Responsibilities
 
-- Capture a desktop region.
+- Capture a desktop region for Manual Mode.
+- Process an already captured desktop image for Live Mode.
 - Perform positional OCR.
 - Translate detected text blocks.
 - Return translated regions with desktop coordinates.
@@ -23,8 +25,12 @@ This class does NOT:
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
-from core.capture_engine import capture_region
+from core.capture_engine import (
+    capture_region,
+    get_desktop_bounds,
+)
 
 from logger import logger
 from core.ocr import extract_text_data
@@ -40,7 +46,8 @@ from config import (
 
 class ControllerImagePipeline:
     """
-    Shared image capture pipeline for the Controller.
+    Shared image capture and image-processing pipeline
+    for the Controller.
     """
 
     MODULE = "ControllerPipeline"
@@ -74,6 +81,8 @@ class ControllerImagePipeline:
         """
         Capture a desktop region and process it through
         the Controller's shared image processing pipeline.
+
+        This is the existing Manual Mode API.
 
         OCR coordinates are converted from image-local
         coordinates into Windows desktop coordinates.
@@ -111,8 +120,8 @@ class ControllerImagePipeline:
         # --------------------------------------------------
         # Native DesktopVisionEngine capture.
         #
-        # capture_region() captures the complete native
-        # virtual desktop and crops the requested region.
+        # Manual Mode captures the requested region through
+        # the existing capture_region() API.
         # --------------------------------------------------
 
         region = capture_region(
@@ -161,6 +170,215 @@ class ControllerImagePipeline:
 
         return {
             "captured_region": region,
+            "result": result,
+        }
+
+    # --------------------------------------------------
+    # LIVE REGION PROCESSING
+    # --------------------------------------------------
+
+    def process_live_region(
+        self,
+        desktop_image,
+        bounds,
+    ):
+        """
+        Process a changed desktop region from an already
+        captured unified desktop image.
+
+        This method is used by Live Mode.
+
+        IMPORTANT
+        ---------
+        This method does NOT perform another desktop
+        capture.
+
+        The supplied desktop_image must originate from
+        the same unified DesktopVisionEngine acquisition
+        that produced the dirty-region metadata.
+
+        Parameters
+        ----------
+        desktop_image : PIL.Image
+            Complete virtual desktop image.
+
+        bounds : tuple
+            Region in Windows virtual-desktop coordinates:
+
+                (left, top, width, height)
+
+        Returns
+        -------
+        dict
+            {
+                "result": dict
+            }
+
+        Notes
+        -----
+        The complete desktop image is cropped in Python.
+        The cropped image is then passed into the existing
+        process_image() pipeline.
+
+        OCR coordinates are converted back into Windows
+        desktop coordinates using the region origin.
+        """
+
+        if desktop_image is None:
+            raise ValueError(
+                "Live desktop image cannot be None."
+            )
+
+        if not bounds or len(bounds) != 4:
+            raise ValueError(
+                "Live region bounds must contain "
+                "(left, top, width, height)."
+            )
+
+        left, top, width, height = bounds
+
+        if width <= 0:
+            raise ValueError(
+                "Live region width must be "
+                "greater than zero."
+            )
+
+        if height <= 0:
+            raise ValueError(
+                "Live region height must be "
+                "greater than zero."
+            )
+
+        # --------------------------------------------------
+        # Determine the virtual desktop image origin.
+        #
+        # The native DesktopVisionEngine image represents
+        # the complete Windows virtual desktop. Therefore
+        # absolute desktop coordinates must be converted
+        # into image-local coordinates before cropping.
+        # --------------------------------------------------
+
+        (
+            desktop_left,
+            desktop_top,
+            desktop_width,
+            desktop_height,
+        ) = get_desktop_bounds()
+
+        desktop_right = (
+            desktop_left
+            + desktop_width
+        )
+
+        desktop_bottom = (
+            desktop_top
+            + desktop_height
+        )
+
+        region_right = (
+            left
+            + width
+        )
+
+        region_bottom = (
+            top
+            + height
+        )
+
+        # --------------------------------------------------
+        # Validate region against the virtual desktop.
+        # --------------------------------------------------
+
+        if left < desktop_left:
+            raise ValueError(
+                f"Live region left coordinate {left} "
+                f"is outside the virtual desktop."
+            )
+
+        if top < desktop_top:
+            raise ValueError(
+                f"Live region top coordinate {top} "
+                f"is outside the virtual desktop."
+            )
+
+        if region_right > desktop_right:
+            raise ValueError(
+                f"Live region right coordinate "
+                f"{region_right} exceeds virtual "
+                f"desktop right boundary "
+                f"{desktop_right}."
+            )
+
+        if region_bottom > desktop_bottom:
+            raise ValueError(
+                f"Live region bottom coordinate "
+                f"{region_bottom} exceeds virtual "
+                f"desktop bottom boundary "
+                f"{desktop_bottom}."
+            )
+
+        # --------------------------------------------------
+        # Convert Windows virtual-desktop coordinates into
+        # coordinates inside the unified desktop image.
+        # --------------------------------------------------
+
+        crop_left = (
+            left
+            - desktop_left
+        )
+
+        crop_top = (
+            top
+            - desktop_top
+        )
+
+        crop_right = (
+            crop_left
+            + width
+        )
+
+        crop_bottom = (
+            crop_top
+            + height
+        )
+
+        # --------------------------------------------------
+        # Crop from the already captured desktop image.
+        #
+        # NO native capture occurs here.
+        # --------------------------------------------------
+
+        region_image = desktop_image.crop(
+            (
+                crop_left,
+                crop_top,
+                crop_right,
+                crop_bottom,
+            )
+        )
+
+        logger.info(
+            self.MODULE,
+            "Processing Live region "
+            f"({left}, {top}, {width}, {height}) "
+            "from unified desktop image."
+        )
+
+        # --------------------------------------------------
+        # Process the cropped image through the existing
+        # OCR → Translation pipeline.
+        #
+        # The crop origin is preserved so positional OCR
+        # results become Windows desktop coordinates.
+        # --------------------------------------------------
+
+        result = self.process_image(
+            region_image,
+            origin_left=left,
+            origin_top=top,
+        )
+
+        return {
             "result": result,
         }
 
@@ -228,9 +446,21 @@ class ControllerImagePipeline:
 
         total_start = time.perf_counter()
 
+        logger.info(
+            self.MODULE,
+            "Image processing started "
+            f"for image {image.width}x{image.height} "
+            f"at origin ({origin_left}, {origin_top})."
+        )
+
         # ----------------------------------------------
         # Positional OCR
         # ----------------------------------------------
+
+        logger.info(
+            self.MODULE,
+            "Positional OCR started."
+        )
 
         start = time.perf_counter()
 
@@ -249,11 +479,24 @@ class ControllerImagePipeline:
             f"{ocr_time:.3f} sec"
         )
 
+        logger.info(
+            self.MODULE,
+            "Positional OCR completed "
+            f"with {len(ocr_data) if ocr_data else 0} "
+            "detected item(s)."
+        )
+
         # ----------------------------------------------
         # No OCR text
         # ----------------------------------------------
 
         if not ocr_data:
+
+            logger.info(
+                self.MODULE,
+                "No OCR text detected. "
+                "Returning no_text result."
+            )
 
             total_time = (
                 time.perf_counter()
@@ -263,6 +506,12 @@ class ControllerImagePipeline:
             print(
                 f"TOTAL       : "
                 f"{total_time:.3f} sec\n"
+            )
+
+            logger.info(
+                self.MODULE,
+                "Image processing returning "
+                "with status=no_text."
             )
 
             return {
@@ -283,15 +532,11 @@ class ControllerImagePipeline:
         # ----------------------------------------------
         # Group OCR words into text blocks
         # ----------------------------------------------
-        #
-        # Tesseract provides block / paragraph / line
-        # information. We use the block and paragraph
-        # identifiers to avoid translating every individual
-        # word.
-        #
-        # Each resulting block becomes a candidate
-        # TranslationMap region.
-        # ----------------------------------------------
+
+        logger.info(
+            self.MODULE,
+            "Grouping OCR items into text blocks."
+        )
 
         grouped_blocks = {}
 
@@ -310,16 +555,17 @@ class ControllerImagePipeline:
                 item
             )
 
+        logger.info(
+            self.MODULE,
+            "OCR grouping completed: "
+            f"{len(grouped_blocks)} text block(s)."
+        )
+
         # ----------------------------------------------
-        # Translation
+        # Prepare translation jobs
         # ----------------------------------------------
 
-        translated_entries = []
-
-        all_original_text = []
-        all_translation_text = []
-
-        translation_start = time.perf_counter()
+        translation_jobs = []
 
         for block_items in grouped_blocks.values():
 
@@ -327,12 +573,12 @@ class ControllerImagePipeline:
                 continue
 
             # ------------------------------------------
-            # Sort words in reading order.
+            # Sort words in Tesseract reading order.
             # ------------------------------------------
 
             block_items.sort(
                 key=lambda item: (
-                    item.get("top", 0),
+                    item.get("line_num", 0),
                     item.get("left", 0),
                 )
             )
@@ -398,9 +644,49 @@ class ControllerImagePipeline:
                 - local_top
             )
 
-            # ------------------------------------------
-            # Translate this text block.
-            # ------------------------------------------
+            translation_jobs.append(
+                {
+                    "block_text": block_text,
+                    "bounds": (
+                        desktop_left,
+                        desktop_top,
+                        desktop_width,
+                        desktop_height,
+                    ),
+                }
+            )
+
+        # ----------------------------------------------
+        # Translation
+        # ----------------------------------------------
+
+        translated_entries = []
+
+        all_original_text = []
+        all_translation_text = []
+
+        logger.info(
+            self.MODULE,
+            "Translation started for "
+            f"{len(translation_jobs)} text block(s)."
+        )
+
+        translation_start = time.perf_counter()
+
+        def translate_job(job):
+            """
+            Translate one independent OCR text block.
+
+            The existing translate_text() API is retained.
+            """
+
+            block_text = job["block_text"]
+
+            logger.info(
+                self.MODULE,
+                "Translating text block "
+                f"({len(block_text)} characters)."
+            )
 
             translated_text = translate_text(
                 block_text,
@@ -409,33 +695,42 @@ class ControllerImagePipeline:
             )
 
             if translated_text is None:
-
                 translated_text = ""
 
-            translated_text = str(
-                translated_text
-            ).strip()
+            return {
+                "bounds": job["bounds"],
+                "original": block_text,
+                "translation": str(
+                    translated_text
+                ).strip(),
+            }
 
-            translated_entries.append(
-                {
-                    "bounds": (
-                        desktop_left,
-                        desktop_top,
-                        desktop_width,
-                        desktop_height,
-                    ),
-                    "original": block_text,
-                    "translation": translated_text,
-                }
+        #
+        # Each OCR block is independent, so translations can
+        # safely run concurrently.
+        #
+        # max_workers is limited to the number of actual
+        # translation jobs and never exceeds 4.
+        #
+
+        if translation_jobs:
+
+            worker_count = min(
+                len(translation_jobs),
+                4,
             )
 
-            all_original_text.append(
-                block_text
-            )
+            with ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="TranslationBlock",
+            ) as executor:
 
-            all_translation_text.append(
-                translated_text
-            )
+                translated_entries = list(
+                    executor.map(
+                        translate_job,
+                        translation_jobs,
+                    )
+                )
 
         translation_time = (
             time.perf_counter()
@@ -447,9 +742,31 @@ class ControllerImagePipeline:
             f"{translation_time:.3f} sec"
         )
 
+        logger.info(
+            self.MODULE,
+            "Translation completed. "
+            f"{len(translated_entries)} translated "
+            "region(s) generated."
+        )
+
         # ----------------------------------------------
         # Combined text
         # ----------------------------------------------
+
+        logger.info(
+            self.MODULE,
+            "Combining original and translated text."
+        )
+
+        for entry in translated_entries:
+
+            all_original_text.append(
+                entry["original"]
+            )
+
+            all_translation_text.append(
+                entry["translation"]
+            )
 
         original_text = "\n".join(
             all_original_text
@@ -462,6 +779,11 @@ class ControllerImagePipeline:
         # ----------------------------------------------
         # History
         # ----------------------------------------------
+
+        logger.info(
+            self.MODULE,
+            "History save started."
+        )
 
         history_start = time.perf_counter()
 
@@ -482,6 +804,11 @@ class ControllerImagePipeline:
             f"{history_time:.3f} sec"
         )
 
+        logger.info(
+            self.MODULE,
+            "History save completed."
+        )
+
         # ----------------------------------------------
         # Total
         # ----------------------------------------------
@@ -496,6 +823,12 @@ class ControllerImagePipeline:
         print(
             f"TOTAL       : "
             f"{total_time:.3f} sec\n"
+        )
+
+        logger.info(
+            self.MODULE,
+            "Image processing stages completed. "
+            f"Total time: {total_time:.3f} sec."
         )
 
         # ----------------------------------------------
@@ -531,7 +864,7 @@ class ControllerImagePipeline:
         # Result
         # ----------------------------------------------
 
-        return {
+        result = {
             "status": "success",
             "original": original_text,
             "translation": translated_text,
@@ -545,3 +878,12 @@ class ControllerImagePipeline:
             "history_time": history_time,
             "total_time": total_time,
         }
+
+        logger.info(
+            self.MODULE,
+            "Image processing returning "
+            f"with status={result['status']}, "
+            f"entries={len(translated_entries)}."
+        )
+
+        return result

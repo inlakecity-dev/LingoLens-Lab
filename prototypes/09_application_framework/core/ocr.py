@@ -113,7 +113,8 @@ def extract_text_data(
     inside the supplied image.
 
     Tesseract provides word-level bounding boxes
-    together with block and paragraph identifiers.
+    together with block, paragraph and line
+    identifiers.
 
     Empty OCR results are ignored.
 
@@ -141,6 +142,7 @@ def extract_text_data(
                 "confidence": float,
                 "block_num": int,
                 "par_num": int,
+                "line_num": int,
             }
 
         Coordinates are relative to the supplied
@@ -212,7 +214,8 @@ def extract_text_data(
                 #
                 # These identifiers allow the Controller
                 # Image Pipeline to group words belonging
-                # to the same text block.
+                # to the same text block and preserve
+                # Tesseract's detected reading order.
                 # ----------------------------------------
 
                 "block_num": int(
@@ -221,6 +224,10 @@ def extract_text_data(
 
                 "par_num": int(
                     data["par_num"][index]
+                ),
+
+                "line_num": int(
+                    data["line_num"][index]
                 ),
             }
         )
