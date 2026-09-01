@@ -6,8 +6,10 @@ Capture Engine
 Responsible for capturing images from the Windows desktop.
 
 The native DesktopVisionEngine provides the complete virtual desktop
-and physical monitor layout. Python performs region cropping on the
-captured image.
+and physical monitor layout for Live Mode.
+
+Manual Mode uses direct Windows screen capture for the requested
+region and does not depend on DesktopVisionEngine.
 
 This module contains no OCR, Translation or UI logic.
 """
@@ -20,7 +22,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageGrab
 
 
 # ------------------------------------------------------------
@@ -252,20 +254,18 @@ _desktop_bounds: tuple[int, int, int, int] = (
 # ------------------------------------------------------------
 #
 # DesktopVisionEngine owns stateful DXGI Desktop Duplication
-# sessions. The same native engine is used by multiple Python
-# consumers:
+# sessions.
+#
+# The same native engine is used by:
 #
 #     DesktopObserver
 #         -> capture_desktop_changes()
 #
-#     ControllerPipeline
-#         -> capture_fullscreen()
+#     Live Controller
+#         -> capture_desktop_state()
 #
 # These operations must never enter the native engine
 # concurrently.
-#
-# RLock is used because some protected functions call other
-# protected functions internally.
 # ------------------------------------------------------------
 
 _native_lock = threading.RLock()
@@ -384,6 +384,64 @@ def _calculate_desktop_bounds(
 
 
 # ------------------------------------------------------------
+# Windows virtual desktop bounds
+# ------------------------------------------------------------
+
+def _get_windows_virtual_desktop_bounds() -> tuple[int, int, int, int]:
+    """
+    Return the Windows virtual desktop bounds directly from
+    Windows.
+
+    This helper is intentionally independent from
+    DesktopVisionEngine.
+
+    It is used by Manual Mode so that a simple rectangle
+    capture does not initialize or depend on the native
+    DesktopVisionEngine.
+    """
+
+    user32 = ctypes.windll.user32
+
+    #
+    # System metrics for the Windows virtual screen.
+    #
+    # SM_XVIRTUALSCREEN = 76
+    # SM_YVIRTUALSCREEN = 77
+    # SM_CXVIRTUALSCREEN = 78
+    # SM_CYVIRTUALSCREEN = 79
+    #
+
+    left = user32.GetSystemMetrics(
+        76
+    )
+
+    top = user32.GetSystemMetrics(
+        77
+    )
+
+    width = user32.GetSystemMetrics(
+        78
+    )
+
+    height = user32.GetSystemMetrics(
+        79
+    )
+
+    if width <= 0 or height <= 0:
+        raise RuntimeError(
+            "Windows returned an invalid virtual desktop size: "
+            f"{width}x{height}."
+        )
+
+    return (
+        left,
+        top,
+        width,
+        height,
+    )
+
+
+# ------------------------------------------------------------
 # Load output metadata
 # ------------------------------------------------------------
 
@@ -459,7 +517,8 @@ def _ensure_native_engine() -> None:
     """
     Load and initialize the native DesktopVisionEngine.
 
-    Initialization happens lazily on the first capture.
+    Initialization happens lazily on the first native
+    capture or desktop metadata request.
     """
 
     global _bridge_dll
@@ -684,6 +743,8 @@ def get_desktop_bounds() -> tuple[int, int, int, int]:
     The coordinates are derived from the physical monitor
     layout rather than assuming that the desktop starts at
     coordinate 0,0.
+
+    Live Mode uses the native DesktopVisionEngine metadata.
     """
 
     _ensure_native_engine()
@@ -795,18 +856,6 @@ def get_last_desktop_changes() -> dict:
     """
     Return desktop change metadata from the most recent
     native desktop capture.
-
-    The native DesktopVisionEngine updates its dirty and
-    move regions whenever a desktop change observation or
-    desktop image capture is performed.
-
-    Returns
-    -------
-    dict
-        {
-            "dirty_regions": list[DesktopChangeRegion],
-            "move_regions": list[DesktopMoveRegion],
-        }
     """
 
     _ensure_native_engine()
@@ -865,22 +914,7 @@ def capture_desktop_state() -> dict:
         2. Desktop-change metadata belonging to that
            same native acquisition.
 
-    Returns
-    -------
-    dict
-        {
-            "image": PIL.Image.Image,
-            "dirty_regions": list[DesktopChangeRegion],
-            "move_regions": list[DesktopMoveRegion],
-        }
-
     This is the preferred acquisition path for Live Mode.
-
-    Important
-    ---------
-    This function performs exactly one native desktop
-    acquisition. It does NOT call capture_desktop_changes()
-    after capturing the image.
     """
 
     _ensure_native_engine()
@@ -890,10 +924,6 @@ def capture_desktop_state() -> dict:
     with _native_lock:
 
         try:
-
-            # ------------------------------------------------
-            # Perform one unified native acquisition.
-            # ------------------------------------------------
 
             success = (
                 _bridge_dll.DVEPB_CaptureDesktopState(
@@ -944,11 +974,6 @@ def capture_desktop_state() -> dict:
                     f"(expected {expected_bytes})."
                 )
 
-            # ------------------------------------------------
-            # Verify native image dimensions against the
-            # virtual desktop metadata.
-            # ------------------------------------------------
-
             (
                 desktop_left,
                 desktop_top,
@@ -972,19 +997,10 @@ def capture_desktop_state() -> dict:
                     f"(expected {desktop_height})."
                 )
 
-            # ------------------------------------------------
-            # Copy native memory into Python-managed memory.
-            # ------------------------------------------------
-
             pixel_buffer = ctypes.string_at(
                 native_image.pixels,
                 native_image.pixelBytes,
             )
-
-            # ------------------------------------------------
-            # Native format is BGRA.
-            # Convert it to RGBA.
-            # ------------------------------------------------
 
             image = Image.frombuffer(
                 "RGBA",
@@ -999,15 +1015,6 @@ def capture_desktop_state() -> dict:
                 1,
             ).copy()
 
-            # ------------------------------------------------
-            # The native engine stores the metadata from the
-            # SAME acquisition in its last-change state.
-            #
-            # Read it before releasing the Python lock, but
-            # still within the same native-engine critical
-            # section.
-            # ------------------------------------------------
-
             changes = _get_last_desktop_changes_locked()
 
             return {
@@ -1021,11 +1028,6 @@ def capture_desktop_state() -> dict:
             }
 
         finally:
-
-            # ------------------------------------------------
-            # Native C++ owns this memory.
-            # Always release it through the bridge.
-            # ------------------------------------------------
 
             _bridge_dll.DVEPB_FreeImage(
                 ctypes.byref(native_image)
@@ -1092,6 +1094,8 @@ def capture_fullscreen() -> Image.Image:
     Capture the complete Windows virtual desktop
     using DesktopVisionEngine.
 
+    This function belongs to the native/live capture path.
+
     Returns
     -------
     PIL.Image.Image
@@ -1105,10 +1109,6 @@ def capture_fullscreen() -> Image.Image:
     with _native_lock:
 
         try:
-
-            # ------------------------------------------------
-            # Capture native desktop image.
-            # ------------------------------------------------
 
             success = _bridge_dll.DVEPB_CaptureDesktop(
                 ctypes.byref(native_image)
@@ -1157,11 +1157,6 @@ def capture_fullscreen() -> Image.Image:
                     f"(expected {expected_bytes})."
                 )
 
-            # ------------------------------------------------
-            # Verify native image dimensions against the
-            # virtual desktop metadata.
-            # ------------------------------------------------
-
             (
                 desktop_left,
                 desktop_top,
@@ -1185,19 +1180,10 @@ def capture_fullscreen() -> Image.Image:
                     f"(expected {desktop_height})."
                 )
 
-            # ------------------------------------------------
-            # Copy native memory into Python-managed memory.
-            # ------------------------------------------------
-
             pixel_buffer = ctypes.string_at(
                 native_image.pixels,
                 native_image.pixelBytes,
             )
-
-            # ------------------------------------------------
-            # Native format is BGRA.
-            # Convert it to RGBA.
-            # ------------------------------------------------
 
             image = Image.frombuffer(
                 "RGBA",
@@ -1216,11 +1202,6 @@ def capture_fullscreen() -> Image.Image:
 
         finally:
 
-            # ------------------------------------------------
-            # Native C++ owns this memory.
-            # Always release it through the bridge.
-            # ------------------------------------------------
-
             _bridge_dll.DVEPB_FreeImage(
                 ctypes.byref(native_image)
             )
@@ -1237,10 +1218,37 @@ def capture_region(
     bottom: int,
 ) -> CapturedRegion:
     """
-    Capture a rectangular desktop region.
+    Capture a rectangular desktop region for Manual Mode.
 
-    The complete virtual desktop is captured by the native
-    engine first. Python then crops the requested region.
+    IMPORTANT
+    ---------
+    Manual Mode intentionally does NOT use
+    DesktopVisionEngine.
+
+    The requested rectangle is captured directly using
+    Windows screen capture through PIL.ImageGrab.
+
+    This keeps Manual Mode independent from the stateful
+    DXGI Desktop Duplication engine used by Live Mode.
+
+    Parameters
+    ----------
+    left : int
+        Left Windows desktop coordinate.
+
+    top : int
+        Top Windows desktop coordinate.
+
+    right : int
+        Right Windows desktop coordinate.
+
+    bottom : int
+        Bottom Windows desktop coordinate.
+
+    Returns
+    -------
+    CapturedRegion
+        Captured image and its absolute desktop coordinates.
     """
 
     if right <= left:
@@ -1255,14 +1263,19 @@ def capture_region(
             "greater than top coordinate."
         )
 
-    desktop = capture_fullscreen()
+    # --------------------------------------------------------
+    # Obtain Windows virtual desktop bounds directly.
+    #
+    # This intentionally does NOT call get_desktop_bounds()
+    # because that function initializes DesktopVisionEngine.
+    # --------------------------------------------------------
 
     (
         desktop_left,
         desktop_top,
         desktop_width,
         desktop_height,
-    ) = get_desktop_bounds()
+    ) = _get_windows_virtual_desktop_bounds()
 
     desktop_right = (
         desktop_left
@@ -1275,7 +1288,7 @@ def capture_region(
     )
 
     # --------------------------------------------------------
-    # Validate against the actual Windows virtual desktop.
+    # Validate requested region.
     # --------------------------------------------------------
 
     if left < desktop_left:
@@ -1305,34 +1318,29 @@ def capture_region(
         )
 
     # --------------------------------------------------------
-    # Convert Windows desktop coordinates into image
-    # coordinates.
+    # Direct Windows screen capture.
+    #
+    # all_screens=True allows the capture to operate against
+    # the Windows virtual desktop rather than only the primary
+    # monitor.
+    #
+    # No DesktopVisionEngine call occurs here.
     # --------------------------------------------------------
 
-    crop_left = (
-        left - desktop_left
+    image = ImageGrab.grab(
+        bbox=(
+            left,
+            top,
+            right,
+            bottom,
+        ),
+        all_screens=True,
     )
 
-    crop_top = (
-        top - desktop_top
-    )
-
-    crop_right = (
-        right - desktop_left
-    )
-
-    crop_bottom = (
-        bottom - desktop_top
-    )
-
-    image = desktop.crop(
-        (
-            crop_left,
-            crop_top,
-            crop_right,
-            crop_bottom,
+    if image is None:
+        raise RuntimeError(
+            "Windows screen capture returned no image."
         )
-    )
 
     return CapturedRegion(
         image=image,

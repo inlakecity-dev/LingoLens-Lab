@@ -1,6 +1,4 @@
 """
-translation_map.py
-
 Stores translated text mapped to desktop coordinates.
 
 The Translation Map is the central data structure used by
@@ -424,19 +422,66 @@ class TranslationMap:
         translation,
     ):
         """
-        Replace every translated entry intersecting
-        the supplied desktop region.
+        Atomically replace every translated entry
+        intersecting the supplied desktop region.
+
+        A single logical map update produces exactly
+        one change notification.
+
+        This prevents observers such as the Floating Lens
+        from refreshing against an intermediate state where
+        the old entries have already been removed but the
+        replacement entry has not yet been added.
         """
 
-        self.remove_entries_in_region(
-            bounds
+        left, top, width, height = bounds
+
+        right = left + width
+        bottom = top + height
+
+        remaining = []
+
+        for entry in self._entries:
+
+            e_left, e_top, e_width, e_height = (
+                entry.bounds
+            )
+
+            e_right = e_left + e_width
+            e_bottom = e_top + e_height
+
+            intersects = not (
+                e_right < left
+                or e_left > right
+                or e_bottom < top
+                or e_top > bottom
+            )
+
+            if not intersects:
+                remaining.append(
+                    entry
+                )
+
+        #
+        # Add the replacement entry before notifying
+        # listeners.
+        #
+        # This makes the complete logical update visible
+        # to every observer at once.
+        #
+
+        remaining.append(
+            TranslationEntry(
+                id=next(_entry_id),
+                bounds=bounds,
+                original=original,
+                translation=translation,
+            )
         )
 
-        self.add_entry(
-            bounds,
-            original,
-            translation,
-        )
+        self._entries = remaining
+
+        self._notify_change()
 
     def remove_entries_in_region(
         self,

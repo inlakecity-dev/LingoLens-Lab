@@ -21,6 +21,7 @@ from config import (
     DEFAULT_OCR_LANGUAGES,
 )
 
+
 # ------------------------------------------------------------
 # Configure Tesseract executable
 # ------------------------------------------------------------
@@ -28,6 +29,7 @@ from config import (
 pytesseract.pytesseract.tesseract_cmd = (
     TESSERACT_PATH
 )
+
 
 # ------------------------------------------------------------
 # OCR Language Configuration
@@ -101,12 +103,13 @@ def extract_text(
 
 
 # ------------------------------------------------------------
-# Positional OCR Result
+# Positional OCR
 # ------------------------------------------------------------
 
 def extract_text_data(
     image,
     languages=None,
+    psm=3,
 ):
     """
     Extract text together with its position
@@ -125,6 +128,15 @@ def extract_text_data(
 
     languages : list[str] | None
         OCR language names.
+
+    psm : int
+        Tesseract Page Segmentation Mode.
+
+        Default:
+            3 - Fully automatic page segmentation.
+
+        Live Mode may explicitly use:
+            7 - Treat image as a single text line.
 
     Returns
     -------
@@ -155,9 +167,28 @@ def extract_text_data(
         )
     )
 
+    # --------------------------------------------------------
+    # Tesseract page segmentation
+    #
+    # Manual Rectangle Mode normally captures a larger
+    # workspace containing multiple lines and text blocks.
+    #
+    # Therefore the default is PSM 3:
+    #
+    #     Fully automatic page segmentation.
+    #
+    # Live Mode can explicitly request PSM 7 when processing
+    # a tightly bounded single-line changed region.
+    # --------------------------------------------------------
+
+    positional_ocr_config = (
+        f"--psm {psm}"
+    )
+
     data = pytesseract.image_to_data(
         image,
         lang=tesseract_languages,
+        config=positional_ocr_config,
         output_type=pytesseract.Output.DICT,
     )
 
@@ -178,13 +209,16 @@ def extract_text_data(
             continue
 
         try:
+
             confidence = float(
                 data["conf"][index]
             )
+
         except (
             ValueError,
             TypeError,
         ):
+
             confidence = -1.0
 
         results.append(
@@ -209,14 +243,14 @@ def extract_text_data(
 
                 "confidence": confidence,
 
-                # ----------------------------------------
+                # --------------------------------------------
                 # Tesseract hierarchy
                 #
                 # These identifiers allow the Controller
                 # Image Pipeline to group words belonging
                 # to the same text block and preserve
                 # Tesseract's detected reading order.
-                # ----------------------------------------
+                # --------------------------------------------
 
                 "block_num": int(
                     data["block_num"][index]

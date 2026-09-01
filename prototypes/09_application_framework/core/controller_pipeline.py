@@ -25,7 +25,6 @@ This class does NOT:
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 from core.capture_engine import (
     capture_region,
@@ -51,6 +50,27 @@ class ControllerImagePipeline:
     """
 
     MODULE = "ControllerPipeline"
+
+    # --------------------------------------------------
+    # Live OCR context
+    # --------------------------------------------------
+    #
+    # ChangeFilter intentionally returns a tight region
+    # around the pixels that actually changed.
+    #
+    # A text change can therefore be much smaller than
+    # the complete word, sentence, or paragraph containing
+    # that change.
+    #
+    # Live OCR needs additional surrounding context so
+    # Tesseract can recognize the complete text block.
+    #
+    # These values affect ONLY Live Mode.
+    # Manual Mode continues to use the exact selected region.
+    #
+
+    LIVE_OCR_CONTEXT_X = 200
+    LIVE_OCR_CONTEXT_Y = 40
 
     def __init__(self, controller):
         """
@@ -197,6 +217,15 @@ class ControllerImagePipeline:
         the same unified DesktopVisionEngine acquisition
         that produced the dirty-region metadata.
 
+        The incoming bounds represent the meaningful
+        changed region identified by ChangeFilter.
+
+        ChangeFilter intentionally produces tight regions.
+        Therefore this method expands that region slightly
+        before OCR so that a changed character or word can
+        be recognized in the context of its surrounding
+        text.
+
         Parameters
         ----------
         desktop_image : PIL.Image
@@ -213,15 +242,6 @@ class ControllerImagePipeline:
             {
                 "result": dict
             }
-
-        Notes
-        -----
-        The complete desktop image is cropped in Python.
-        The cropped image is then passed into the existing
-        process_image() pipeline.
-
-        OCR coordinates are converted back into Windows
-        desktop coordinates using the region origin.
         """
 
         if desktop_image is None:
@@ -253,9 +273,7 @@ class ControllerImagePipeline:
         # Determine the virtual desktop image origin.
         #
         # The native DesktopVisionEngine image represents
-        # the complete Windows virtual desktop. Therefore
-        # absolute desktop coordinates must be converted
-        # into image-local coordinates before cropping.
+        # the complete Windows virtual desktop.
         # --------------------------------------------------
 
         (
@@ -286,7 +304,7 @@ class ControllerImagePipeline:
         )
 
         # --------------------------------------------------
-        # Validate region against the virtual desktop.
+        # Validate the incoming ChangeFilter region.
         # --------------------------------------------------
 
         if left < desktop_left:
@@ -318,28 +336,102 @@ class ControllerImagePipeline:
             )
 
         # --------------------------------------------------
+        # Expand the region for OCR context.
+        #
+        # The incoming region is the actual changed area.
+        #
+        # Example:
+        #
+        #     ChangeFilter:
+        #
+        #             [30 x 24]
+        #
+        #     becomes:
+        #
+        #             [430 x 104]
+        #     approximately, subject to desktop boundaries.
+        #
+        # This gives OCR enough surrounding text to identify
+        # the complete word/text block.
+        #
+        # The expanded coordinates are used only for OCR.
+        # The resulting OCR bounding boxes are still converted
+        # back into absolute desktop coordinates.
+        # --------------------------------------------------
+
+        context_left = max(
+            desktop_left,
+            left - self.LIVE_OCR_CONTEXT_X,
+        )
+
+        context_top = max(
+            desktop_top,
+            top - self.LIVE_OCR_CONTEXT_Y,
+        )
+
+        context_right = min(
+            desktop_right,
+            region_right + self.LIVE_OCR_CONTEXT_X,
+        )
+
+        context_bottom = min(
+            desktop_bottom,
+            region_bottom + self.LIVE_OCR_CONTEXT_Y,
+        )
+
+        context_width = (
+            context_right
+            - context_left
+        )
+
+        context_height = (
+            context_bottom
+            - context_top
+        )
+
+        if context_width <= 0:
+            raise ValueError(
+                "Expanded Live OCR context width must be "
+                "greater than zero."
+            )
+
+        if context_height <= 0:
+            raise ValueError(
+                "Expanded Live OCR context height must be "
+                "greater than zero."
+            )
+
+        logger.info(
+            self.MODULE,
+            "Expanded Live OCR region "
+            f"from ({left}, {top}, {width}, {height}) "
+            f"to ({context_left}, {context_top}, "
+            f"{context_width}, {context_height})."
+        )
+
+        # --------------------------------------------------
         # Convert Windows virtual-desktop coordinates into
         # coordinates inside the unified desktop image.
         # --------------------------------------------------
 
         crop_left = (
-            left
+            context_left
             - desktop_left
         )
 
         crop_top = (
-            top
+            context_top
             - desktop_top
         )
 
         crop_right = (
-            crop_left
-            + width
+            context_right
+            - desktop_left
         )
 
         crop_bottom = (
-            crop_top
-            + height
+            context_bottom
+            - desktop_top
         )
 
         # --------------------------------------------------
@@ -357,25 +449,23 @@ class ControllerImagePipeline:
             )
         )
 
-        logger.info(
-            self.MODULE,
-            "Processing Live region "
-            f"({left}, {top}, {width}, {height}) "
-            "from unified desktop image."
-        )
-
         # --------------------------------------------------
-        # Process the cropped image through the existing
-        # OCR → Translation pipeline.
+        # Process the expanded OCR context.
         #
-        # The crop origin is preserved so positional OCR
-        # results become Windows desktop coordinates.
+        # IMPORTANT:
+        #
+        # The origin passed to process_image() is the
+        # expanded context origin, NOT the original
+        # ChangeFilter region origin.
+        #
+        # This ensures OCR coordinates are mapped correctly
+        # back to Windows desktop coordinates.
         # --------------------------------------------------
 
         result = self.process_image(
             region_image,
-            origin_left=left,
-            origin_top=top,
+            origin_left=context_left,
+            origin_top=context_top,
         )
 
         return {
@@ -705,32 +795,24 @@ class ControllerImagePipeline:
                 ).strip(),
             }
 
+        # ----------------------------------------------
+        # Sequential translation
         #
-        # Each OCR block is independent, so translations can
-        # safely run concurrently.
+        # Translate one OCR block at a time.
         #
-        # max_workers is limited to the number of actual
-        # translation jobs and never exceeds 4.
+        # This intentionally avoids sending several
+        # GoogleTranslator requests simultaneously.
         #
+        # The previous concurrent implementation could
+        # cause the external translation service to return
+        # server/error responses.
+        # ----------------------------------------------
 
-        if translation_jobs:
+        for job in translation_jobs:
 
-            worker_count = min(
-                len(translation_jobs),
-                4,
+            translated_entries.append(
+                translate_job(job)
             )
-
-            with ThreadPoolExecutor(
-                max_workers=worker_count,
-                thread_name_prefix="TranslationBlock",
-            ) as executor:
-
-                translated_entries = list(
-                    executor.map(
-                        translate_job,
-                        translation_jobs,
-                    )
-                )
 
         translation_time = (
             time.perf_counter()

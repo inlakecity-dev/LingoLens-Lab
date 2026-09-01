@@ -10,6 +10,7 @@ Coordinates the Live Translation workflow.
 - Start Live Mode.
 - Stop Live Mode.
 - Receive unified desktop acquisition state.
+- Pass dirty-region metadata through UIFilter.
 - Pass complete desktop frames through ChangeFilter.
 - Retain the latest complete desktop image.
 - Retain only the latest meaningful filtered dirty regions.
@@ -20,6 +21,7 @@ Coordinates the Live Translation workflow.
 - Discard stale processing results only when the processed
   region itself changed again.
 - Update the TranslationMap.
+- Generate a debug TranslationMap snapshot.
 - Exclude LingoLens-owned windows from desktop capture.
 
 This class does NOT:
@@ -43,6 +45,8 @@ from logger import logger
 from core.capture_engine import get_desktop_bounds
 from core.change_filter import ChangeFilter
 from core.capture_engine import DesktopChangeRegion
+from core.ui_filter import UIFilter
+from core.translation_map_debug import TranslationMapDebugRenderer
 
 
 # --------------------------------------------------
@@ -62,6 +66,8 @@ class ControllerLive:
     already running:
 
         - the newest complete desktop image is retained
+        - UI structural filtering is applied to dirty
+          region metadata before ChangeFilter
         - ChangeFilter compares each complete frame with
           the previous complete frame
         - the newest filtered dirty-region set replaces
@@ -74,6 +80,16 @@ class ControllerLive:
           makes that result stale
         - remaining regions from an older generation are
           abandoned when a newer generation is waiting
+
+    The first complete desktop acquisition is special:
+
+        - it establishes the ChangeFilter baseline
+        - it is also OCR processed once across the complete
+          virtual desktop
+        - its translated entries populate the TranslationMap
+
+    After that initial bootstrap, Live Mode becomes
+    incremental and processes only meaningful changed regions.
     """
 
     MODULE = "ControllerLive"
@@ -84,7 +100,15 @@ class ControllerLive:
 
     LIVE_SETTLE_DELAY = 0.20
 
-    IGNORE_INITIAL_FULL_DESKTOP_CHANGE = True
+    #
+    # The initial desktop frame is used as the
+    # ChangeFilter baseline.
+    #
+    # IMPORTANT:
+    #
+    # We still OCR the initial complete desktop separately.
+    #
+    INITIAL_FULL_DESKTOP_OCR = True
 
     MAX_COALESCED_DESKTOP_AREA_RATIO = 0.35
 
@@ -117,10 +141,28 @@ class ControllerLive:
         self._pending_lock = threading.Lock()
 
         #
-        # Pixel-difference filter.
+        # Layer 2 structural desktop UI filter.
+        #
+        # This operates only on DXGI dirty-region metadata.
+        # The complete desktop image remains untouched.
+        #
+
+        self._ui_filter = UIFilter()
+
+        #
+        # Layer 3 pixel-difference / text-change filter.
         #
 
         self._change_filter = ChangeFilter()
+
+        #
+        # Debug renderer for visualizing the TranslationMap
+        # over the complete desktop image.
+        #
+
+        self._translation_map_debug_renderer = (
+            TranslationMapDebugRenderer()
+        )
 
         #
         # Always retain the newest complete desktop state.
@@ -578,11 +620,22 @@ class ControllerLive:
         Receive a unified desktop acquisition from
         DesktopObserver.
 
-        The complete acquisition is passed through
-        ChangeFilter before Live OCR work is queued.
+        The complete acquisition image remains untouched.
+
+        Dirty-region metadata flows through:
+
+            Layer 2 UIFilter
+                    ↓
+            ChangeFilter
+
+        before Live OCR work is queued.
 
         Dirty regions are NOT accumulated across multiple
         desktop acquisitions.
+
+        The first complete desktop acquisition is also queued
+        as one full-desktop OCR region so that the TranslationMap
+        is initially populated across the entire virtual desktop.
         """
 
         if not self.running:
@@ -595,7 +648,7 @@ class ControllerLive:
             "image"
         )
 
-        dirty_regions = desktop_state.get(
+        dxgi_dirty_regions = desktop_state.get(
             "dirty_regions",
             [],
         )
@@ -614,12 +667,55 @@ class ControllerLive:
 
             return
 
+        # --------------------------------------------------
+        # Layer 2 - structural UI filtering
+        # --------------------------------------------------
+        #
+        # IMPORTANT:
+        #
+        # Only dirty-region metadata is filtered here.
+        #
+        # The complete desktop image remains unchanged so
+        # ChangeFilter can maintain a synchronized
+        # previous/current desktop baseline.
+        #
+
+        try:
+
+            ui_filtered_regions = (
+                self._ui_filter.filter_dirty_regions(
+                    dxgi_dirty_regions
+                )
+            )
+
+        except Exception as error:
+
+            logger.error(
+                self.MODULE,
+                "UIFilter failed: "
+                f"{error}"
+            )
+
+            return
+
+        logger.info(
+            self.MODULE,
+            "Layer 2 UI filtering "
+            f"retained {len(ui_filtered_regions)} "
+            f"of {len(dxgi_dirty_regions)} "
+            "DXGI dirty region(s)."
+        )
+
+        # --------------------------------------------------
+        # ChangeFilter
+        # --------------------------------------------------
+
         try:
 
             filtered_regions = (
                 self._change_filter.filter_regions(
                     desktop_image=desktop_image,
-                    dirty_regions=dirty_regions,
+                    dirty_regions=ui_filtered_regions,
                     desktop_bounds=get_desktop_bounds(),
                 )
             )
@@ -652,16 +748,96 @@ class ControllerLive:
 
         if is_initial_state:
 
-            if self.IGNORE_INITIAL_FULL_DESKTOP_CHANGE:
+            #
+            # ChangeFilter must see the first complete frame
+            # as its baseline.
+            #
+            # It normally reports the initial frame as a full
+            # desktop change. That change is intentionally NOT
+            # used as ChangeFilter output.
+            #
+            # Instead, when initial full-desktop OCR is enabled,
+            # the same already-captured complete image is queued
+            # directly as one OCR region.
+            #
+
+            if self.INITIAL_FULL_DESKTOP_OCR:
+
+                (
+                    desktop_left,
+                    desktop_top,
+                    desktop_width,
+                    desktop_height,
+                ) = get_desktop_bounds()
+
+                desktop_right = (
+                    desktop_left
+                    + desktop_width
+                )
+
+                desktop_bottom = (
+                    desktop_top
+                    + desktop_height
+                )
+
+                if (
+                    desktop_width <= 0
+                    or desktop_height <= 0
+                ):
+
+                    logger.warning(
+                        self.MODULE,
+                        "Initial full-desktop OCR skipped "
+                        "because virtual desktop bounds are "
+                        f"invalid: "
+                        f"{(desktop_left, desktop_top, desktop_width, desktop_height)}"
+                    )
+
+                    return
+
+                initial_region = DesktopChangeRegion(
+                    left=desktop_left,
+                    top=desktop_top,
+                    right=desktop_right,
+                    bottom=desktop_bottom,
+                )
+
+                with self._pending_lock:
+
+                    self._generation += 1
+
+                    generation = self._generation
+
+                    self._pending_desktop_state = (
+                        desktop_state
+                    )
+
+                    self._pending_dirty_regions = [
+                        initial_region
+                    ]
 
                 logger.info(
                     self.MODULE,
                     "Initial desktop acquisition received. "
-                    "Using it as Live pixel-difference "
-                    "baseline; initial OCR work is skipped."
+                    "ChangeFilter baseline established. "
+                    "Queuing COMPLETE virtual desktop for "
+                    "initial OCR/translation: "
+                    f"bounds={initial_region.bounds}, "
+                    f"generation={generation}."
                 )
 
+                self._work_event.set()
+
                 return
+
+            logger.info(
+                self.MODULE,
+                "Initial desktop acquisition received. "
+                "Using it as Live pixel-difference "
+                "baseline; initial OCR work is skipped."
+            )
+
+            return
 
         # --------------------------------------------------
         # No meaningful pixel change
@@ -669,14 +845,17 @@ class ControllerLive:
 
         if not filtered_regions:
 
-            if dirty_regions:
+            if dxgi_dirty_regions:
 
                 logger.info(
                     self.MODULE,
                     "ChangeFilter found no meaningful pixel "
                     "change inside "
-                    f"{len(dirty_regions)} "
-                    "DXGI dirty region(s). "
+                    f"{len(ui_filtered_regions)} "
+                    "Layer 2 retained DXGI dirty region(s) "
+                    "from "
+                    f"{len(dxgi_dirty_regions)} "
+                    "original dirty region(s). "
                     "OCR work skipped."
                 )
 
@@ -693,8 +872,10 @@ class ControllerLive:
         logger.info(
             self.MODULE,
             "Desktop state changed "
-            f"({len(dirty_regions)} DXGI dirty region(s), "
-            f"{len(filtered_regions)} filtered region(s), "
+            f"({len(dxgi_dirty_regions)} DXGI dirty region(s), "
+            f"{len(ui_filtered_regions)} Layer 2 retained "
+            f"region(s), "
+            f"{len(filtered_regions)} ChangeFilter region(s), "
             f"{len(move_regions)} move region(s))."
         )
 
@@ -1116,7 +1297,22 @@ class ControllerLive:
         """
         Process one unified desktop acquisition.
 
-        Dirty regions have already passed through ChangeFilter.
+        Dirty regions normally have already passed through:
+
+            Layer 2 UIFilter
+            Layer 3 ChangeFilter
+
+        The initial Live bootstrap is different:
+
+            Complete desktop
+                ↓
+            ControllerImagePipeline
+                ↓
+            Positional OCR
+                ↓
+            Translation
+                ↓
+            TranslationMap
 
         The Live region is handed to the shared
         ControllerImagePipeline, which performs the crop from
@@ -1285,8 +1481,30 @@ class ControllerLive:
 
                 return
 
-            if self._has_region_changed_since_processing(
-                dirty_region
+            #
+            # IMPORTANT:
+            #
+            # The initial full-desktop bootstrap is not a
+            # ChangeFilter dirty region. It is the complete
+            # desktop baseline used to populate the initial
+            # TranslationMap.
+            #
+            # Therefore it must not be discarded merely because
+            # another normal desktop generation arrived while
+            # the initial OCR was running.
+            #
+            is_initial_full_desktop_region = (
+                left == desktop_left
+                and top == desktop_top
+                and right == desktop_right
+                and bottom == desktop_bottom
+            )
+
+            if (
+                not is_initial_full_desktop_region
+                and self._has_region_changed_since_processing(
+                    dirty_region
+                )
             ):
 
                 logger.info(
@@ -1314,8 +1532,11 @@ class ControllerLive:
 
                 return
 
-            if self._has_region_changed_since_processing(
-                dirty_region
+            if (
+                not is_initial_full_desktop_region
+                and self._has_region_changed_since_processing(
+                    dirty_region
+                )
             ):
 
                 logger.info(
@@ -1327,17 +1548,46 @@ class ControllerLive:
 
                 continue
 
-            logger.info(
-                self.MODULE,
-                "Updating TranslationMap with "
-                f"{len(entries)} positional entr"
-                f"{'y' if len(entries) == 1 else 'ies'} "
-                f"(generation {generation})."
-            )
+            # --------------------------------------------------
+            # Initial full-desktop TranslationMap population
+            # --------------------------------------------------
+            #
+            # The first Live OCR pass represents the complete
+            # translated desktop.
+            #
+            # Clear any existing entries so the TranslationMap
+            # starts from a clean desktop model.
+            #
 
-            self.controller.translation_map.remove_entries_in_region(
-                dirty_region.bounds
-            )
+            if is_initial_full_desktop_region:
+
+                logger.info(
+                    self.MODULE,
+                    "Initial full-desktop OCR completed. "
+                    "Populating TranslationMap with "
+                    f"{len(entries)} positional entr"
+                    f"{'y' if len(entries) == 1 else 'ies'}."
+                )
+
+                self.controller.translation_map.clear()
+
+            else:
+
+                logger.info(
+                    self.MODULE,
+                    "Updating TranslationMap with "
+                    f"{len(entries)} positional entr"
+                    f"{'y' if len(entries) == 1 else 'ies'} "
+                    f"(generation {generation})."
+                )
+
+                self.controller.translation_map.remove_entries_in_region(
+                    dirty_region.bounds
+                )
+
+            # --------------------------------------------------
+            # Add positional TranslationMap entries
+            # --------------------------------------------------
 
             for entry in entries:
 
@@ -1354,3 +1604,38 @@ class ControllerLive:
                 f"{'y' if len(entries) == 1 else 'ies'} "
                 f"for generation {generation}."
             )
+
+            # --------------------------------------------------
+            # Debug TranslationMap snapshot
+            # --------------------------------------------------
+            #
+            # Render the SAME complete desktop image used by
+            # this Live generation together with the current
+            # TranslationMap.
+            #
+            # This is diagnostic only. It does not participate
+            # in the Live processing pipeline or Floating Lens.
+            #
+
+            try:
+
+                debug_path = (
+                    self._translation_map_debug_renderer.render(
+                        desktop_image,
+                        self.controller.translation_map,
+                    )
+                )
+
+                logger.info(
+                    self.MODULE,
+                    "TranslationMap debug snapshot "
+                    f"written to: {debug_path}"
+                )
+
+            except Exception as error:
+
+                logger.warning(
+                    self.MODULE,
+                    "TranslationMap debug snapshot failed: "
+                    f"{error}"
+                )

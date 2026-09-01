@@ -461,6 +461,11 @@ class FloatingLensWindow:
 
         self.is_open = True
 
+        logger.info(
+            self.MODULE,
+            "Floating Lens opening."
+        )
+
         self.lens_controller.start()
 
         self.register_translation_map_listener()
@@ -491,6 +496,11 @@ class FloatingLensWindow:
 
         self.window.withdraw()
 
+        logger.info(
+            self.MODULE,
+            "Floating Lens hidden."
+        )
+
     def toggle(self):
 
         if self.is_open:
@@ -515,13 +525,30 @@ class FloatingLensWindow:
         )
 
         if controller is None:
+
+            logger.warning(
+                self.MODULE,
+                "TranslationMap lookup failed: "
+                "Lens controller has no controller."
+            )
+
             return None
 
-        return getattr(
+        translation_map = getattr(
             controller,
             "translation_map",
             None,
         )
+
+        if translation_map is None:
+
+            logger.warning(
+                self.MODULE,
+                "TranslationMap lookup failed: "
+                "controller.translation_map is None."
+            )
+
+        return translation_map
 
     def register_translation_map_listener(self):
 
@@ -541,6 +568,11 @@ class FloatingLensWindow:
 
         self._map_listener_registered = True
 
+        logger.info(
+            self.MODULE,
+            "TranslationMap change listener registered."
+        )
+
     def unregister_translation_map_listener(self):
 
         if not self._map_listener_registered:
@@ -559,6 +591,11 @@ class FloatingLensWindow:
         self._map_listener_registered = False
         self._map_refresh_pending = False
 
+        logger.info(
+            self.MODULE,
+            "TranslationMap change listener unregistered."
+        )
+
     def on_translation_map_changed(self):
 
         if not self.is_open:
@@ -568,6 +605,12 @@ class FloatingLensWindow:
             return
 
         self._map_refresh_pending = True
+
+        logger.info(
+            self.MODULE,
+            "TranslationMap changed. "
+            "Scheduling Floating Lens refresh."
+        )
 
         try:
 
@@ -587,6 +630,12 @@ class FloatingLensWindow:
         if not self.is_open:
             return
 
+        logger.info(
+            self.MODULE,
+            "Refreshing Floating Lens after "
+            "TranslationMap change."
+        )
+
         self.update_viewport()
 
     # --------------------------------------------------
@@ -600,11 +649,57 @@ class FloatingLensWindow:
 
         bounds = self.get_viewport_bounds()
 
+        logger.info(
+            self.MODULE,
+            "Floating Lens viewport query: "
+            f"bounds={bounds}"
+        )
+
         entries = (
             self.lens_controller.get_visible_translations(
                 bounds
             )
         )
+
+        entry_count = (
+            len(entries)
+            if entries is not None
+            else 0
+        )
+
+        logger.info(
+            self.MODULE,
+            "Floating Lens viewport result: "
+            f"entries={entry_count}"
+        )
+
+        if entries:
+
+            for index, entry in enumerate(
+                entries,
+                start=1
+            ):
+
+                entry_bounds = getattr(
+                    entry,
+                    "bounds",
+                    None
+                )
+
+                translation = getattr(
+                    entry,
+                    "translation",
+                    ""
+                )
+
+                logger.info(
+                    self.MODULE,
+                    "Visible entry "
+                    f"[{index}]: "
+                    f"bounds={entry_bounds}, "
+                    f"translation_length="
+                    f"{len(translation)}"
+                )
 
         self.render_entries(
             entries
@@ -731,6 +826,12 @@ class FloatingLensWindow:
 
         self.window.update_idletasks()
 
+        logger.info(
+            self.MODULE,
+            "Floating Lens moved: "
+            f"window_position=({x}, {y})"
+        )
+
         self.update_viewport()
 
     # --------------------------------------------------
@@ -743,28 +844,214 @@ class FloatingLensWindow:
 
         self.window.update_idletasks()
 
-        left = (
+        #
+        # Tkinter-reported content coordinates.
+        #
+
+        tk_left = (
             self.content.winfo_rootx()
         )
 
-        top = (
+        tk_top = (
             self.content.winfo_rooty()
         )
 
-        width = (
+        tk_width = (
             self.content.winfo_width()
         )
 
-        height = (
+        tk_height = (
             self.content.winfo_height()
         )
 
-        return (
-            left,
-            top,
-            width,
-            height,
+        #
+        # Tkinter-reported top-level coordinates.
+        #
+
+        window_x = (
+            self.window.winfo_x()
         )
+
+        window_y = (
+            self.window.winfo_y()
+        )
+
+        window_width = (
+            self.window.winfo_width()
+        )
+
+        window_height = (
+            self.window.winfo_height()
+        )
+
+        #
+        # Native HWND diagnostics.
+        #
+
+        hwnd = 0
+        native_left = 0
+        native_top = 0
+        native_right = 0
+        native_bottom = 0
+
+        try:
+
+            hwnd = int(
+                self.window.winfo_id()
+            )
+
+            user32 = ctypes.WinDLL(
+                "user32",
+                use_last_error=True,
+            )
+
+            class RECT(
+                ctypes.Structure
+            ):
+                _fields_ = [
+                    (
+                        "left",
+                        ctypes.c_long,
+                    ),
+                    (
+                        "top",
+                        ctypes.c_long,
+                    ),
+                    (
+                        "right",
+                        ctypes.c_long,
+                    ),
+                    (
+                        "bottom",
+                        ctypes.c_long,
+                    ),
+                ]
+
+            rect = RECT()
+
+            get_window_rect = (
+                user32.GetWindowRect
+            )
+
+            get_window_rect.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(RECT),
+            ]
+
+            get_window_rect.restype = (
+                ctypes.c_bool
+            )
+
+            native_success = (
+                get_window_rect(
+                    ctypes.c_void_p(hwnd),
+                    ctypes.byref(rect),
+                )
+            )
+
+            if native_success:
+
+                native_left = int(
+                    rect.left
+                )
+
+                native_top = int(
+                    rect.top
+                )
+
+                native_right = int(
+                    rect.right
+                )
+
+                native_bottom = int(
+                    rect.bottom
+                )
+
+        except Exception as error:
+
+            logger.warning(
+                self.MODULE,
+                "Native Floating Lens coordinate "
+                f"diagnostic failed: {error}"
+            )
+
+        #
+        # Windows virtual desktop diagnostics.
+        #
+
+        virtual_left = 0
+        virtual_top = 0
+        virtual_width = 0
+        virtual_height = 0
+
+        try:
+
+            user32 = ctypes.WinDLL(
+                "user32",
+                use_last_error=True,
+            )
+
+            #
+            # SM_XVIRTUALSCREEN = 76
+            # SM_YVIRTUALSCREEN = 77
+            # SM_CXVIRTUALSCREEN = 78
+            # SM_CYVIRTUALSCREEN = 79
+            #
+
+            virtual_left = int(
+                user32.GetSystemMetrics(76)
+            )
+
+            virtual_top = int(
+                user32.GetSystemMetrics(77)
+            )
+
+            virtual_width = int(
+                user32.GetSystemMetrics(78)
+            )
+
+            virtual_height = int(
+                user32.GetSystemMetrics(79)
+            )
+
+        except Exception as error:
+
+            logger.warning(
+                self.MODULE,
+                "Windows virtual desktop coordinate "
+                f"diagnostic failed: {error}"
+            )
+
+        logger.info(
+            self.MODULE,
+            "Floating Lens coordinate diagnostic: "
+            f"tk_content=({tk_left}, {tk_top}, "
+            f"{tk_width}, {tk_height}), "
+            f"tk_window=({window_x}, {window_y}, "
+            f"{window_width}, {window_height}), "
+            f"hwnd={hwnd}, "
+            f"native_window_rect=({native_left}, "
+            f"{native_top}, {native_right}, "
+            f"{native_bottom}), "
+            f"windows_virtual_desktop=("
+            f"{virtual_left}, {virtual_top}, "
+            f"{virtual_width}, {virtual_height})"
+        )
+
+        bounds = (
+            tk_left,
+            tk_top,
+            tk_width,
+            tk_height,
+        )
+
+        logger.info(
+            self.MODULE,
+            "Floating Lens content bounds: "
+            f"{bounds}"
+        )
+
+        return bounds
 
     # --------------------------------------------------
     # Theme

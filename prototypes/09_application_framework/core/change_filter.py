@@ -18,6 +18,7 @@ Responsibilities
   tightened desktop change regions.
 - Reject obvious non-text visual noise using cluster-shape
   characteristics.
+- Reject excessively large individual change clusters.
 - Return multiple meaningful desktop change regions.
 
 This class does NOT:
@@ -29,8 +30,8 @@ This class does NOT:
 - Perform debounce or settling logic.
 
 The filter performs pixel-difference tightening,
-connected-component style clustering, and basic
-text-like change filtering only.
+connected-component style clustering, basic text-like change
+filtering, and single-cluster size protection only.
 """
 
 from __future__ import annotations
@@ -92,6 +93,26 @@ class ChangeFilter:
     MIN_CLUSTER_AREA = 20
 
     #
+    # Maximum size of one individual pixel-change cluster
+    # relative to the complete virtual desktop.
+    #
+    # This is intentionally separate from the coalescing
+    # limits because a single connected pixel cluster can
+    # become very large without ever being produced by
+    # region merging.
+    #
+    # Example:
+    #
+    #     desktop = 3840 x 1080
+    #     desktop area = 4,147,200 pixels
+    #     maximum single cluster = 829,440 pixels
+    #
+    # A cluster larger than this is considered too large
+    # to send directly into OCR.
+    #
+    MAX_SINGLE_CLUSTER_AREA_RATIO = 0.20
+
+    #
     # Small expansion used while clustering nearby changed
     # pixels.
     #
@@ -116,7 +137,7 @@ class ChangeFilter:
     # Clusters above this value are treated as too solid
     # to be considered text-like.
     #
-    MAX_TEXT_FILL_RATIO = 0.60
+    MAX_TEXT_FILL_RATIO = 0.75
 
     #
     # Extremely narrow/tall changes are commonly caret,
@@ -125,11 +146,37 @@ class ChangeFilter:
     MAX_TEXT_ASPECT_RATIO = 4.0
 
     #
+    # A complete text line can naturally be wider than the
+    # per-cluster aspect-ratio limit. This higher limit is used
+    # only after multiple compatible clusters have been grouped.
+    # Solid or narrow UI changes must still pass the fill-ratio,
+    # width, and grouping geometry checks.
+    #
+    MAX_GROUPED_TEXT_ASPECT_RATIO = 12.0
+
+    #
     # A meaningful text change should have at least enough
     # horizontal width to represent a plausible character
     # or short text run.
     #
     MIN_TEXT_WIDTH = 8
+
+    # --------------------------------------------------
+    # Text-change grouping configuration
+    # --------------------------------------------------
+
+    #
+    # Nearby pixel-change clusters are grouped only when their
+    # geometry is compatible with one text line. These limits
+    # are intentionally small so grouping does not become a
+    # replacement for UI filtering.
+    #
+    TEXT_GROUP_MAX_HORIZONTAL_GAP = 12
+    TEXT_GROUP_HORIZONTAL_SCALE = 1.5
+    TEXT_GROUP_MAX_VERTICAL_GAP = 4
+    TEXT_GROUP_VERTICAL_SCALE = 0.75
+    TEXT_GROUP_MAX_CENTER_DELTA = 5
+    TEXT_GROUP_CENTER_SCALE = 0.75
 
     def __init__(self):
         """
@@ -342,6 +389,12 @@ class ChangeFilter:
         list[DesktopChangeRegion]
             One or more tightened regions containing actual
             spatially separated changes.
+
+        Nearby compatible text-change clusters are grouped
+        before the final text-like shape test. This allows
+        characters or short fragments produced by one typing
+        event to reach OCR as a useful text region without
+        increasing DIFF_PADDING.
         """
 
         left = dirty_region.left
@@ -489,7 +542,8 @@ class ChangeFilter:
         # clustering algorithm BEFORE:
         #
         #     - MIN_CHANGED_PIXELS filtering
-        #     - MIN_CLUSTER_AREA filtering
+        #     - single-cluster size filtering
+        #     - text-cluster grouping
         #     - text-like filtering
         #     - DIFF_PADDING
         #
@@ -572,7 +626,36 @@ class ChangeFilter:
 
             return []
 
-        result_regions = []
+        #
+        # Calculate the maximum allowed area for one raw
+        # connected cluster.
+        #
+        # This uses the complete virtual desktop dimensions,
+        # not the current DXGI dirty-region dimensions.
+        #
+
+        desktop_area = (
+            desktop_width
+            * desktop_height
+        )
+
+        max_single_cluster_area = int(
+            desktop_area
+            * self.MAX_SINGLE_CLUSTER_AREA_RATIO
+        )
+
+        #
+        # Discard clusters that are too small in terms of
+        # actual changed pixels or too large in terms of
+        # their complete bounding-box area.
+        #
+        # The large-cluster gate is intentionally applied
+        # BEFORE text grouping so that a naturally huge
+        # connected component cannot enter the grouping
+        # stage and eventually become an OCR region.
+        #
+
+        candidate_clusters = []
 
         for index, cluster in enumerate(
             clusters,
@@ -590,7 +673,7 @@ class ChangeFilter:
 
                 print(
                     "[ChangeFilter] "
-                    f"CLUSTER[{index}] rejected: "
+                    f"CLUSTER[{index}] rejected before grouping: "
                     f"changed_pixels="
                     f"{changed_pixel_count} "
                     f"< minimum="
@@ -605,13 +688,117 @@ class ChangeFilter:
                 )
             )
 
-            if not self._is_text_like_cluster(
-                metrics
+            cluster_area = (
+                metrics["area"]
+            )
+
+            if (
+                cluster_area
+                > max_single_cluster_area
             ):
 
                 print(
                     "[ChangeFilter] "
-                    f"CLUSTER[{index}] rejected: "
+                    f"CLUSTER[{index}] rejected before grouping: "
+                    f"area="
+                    f"{cluster_area} "
+                    f"> maximum="
+                    f"{max_single_cluster_area} "
+                    f"("
+                    f"{self.MAX_SINGLE_CLUSTER_AREA_RATIO:.2f}"
+                    f" of desktop area)"
+                )
+
+                continue
+
+            candidate_clusters.append(
+                cluster
+            )
+
+        if not candidate_clusters:
+
+            print(
+                "[ChangeFilter] "
+                "No clusters survived the "
+                "pre-grouping gates."
+            )
+
+            return []
+
+        #
+        # Group nearby compatible clusters before applying the
+        # final text-like shape gate.
+        #
+
+        grouped_clusters = (
+            self._group_text_change_clusters(
+                candidate_clusters
+            )
+        )
+
+        print(
+            "[ChangeFilter] "
+            f"Grouped clusters: "
+            f"{len(grouped_clusters)}"
+        )
+
+        for index, cluster in enumerate(
+            grouped_clusters,
+            start=1,
+        ):
+
+            metrics = (
+                self._cluster_shape_metrics(
+                    cluster
+                )
+            )
+
+            print(
+                "[ChangeFilter] "
+                f"GROUP[{index}] "
+                f"local=("
+                f"{cluster['left']}, "
+                f"{cluster['top']}, "
+                f"{cluster['right']}, "
+                f"{cluster['bottom']}"
+                f") "
+                f"size={metrics['width']}x"
+                f"{metrics['height']} "
+                f"area={metrics['area']} "
+                f"changed_pixels="
+                f"{cluster['changed_pixels']} "
+                f"run_count="
+                f"{metrics['run_count']} "
+                f"fill_ratio="
+                f"{metrics['fill_ratio']:.3f} "
+                f"aspect_ratio="
+                f"{metrics['aspect_ratio']:.2f}"
+            )
+
+        result_regions = []
+
+        for index, cluster in enumerate(
+            grouped_clusters,
+            start=1,
+        ):
+
+            metrics = (
+                self._cluster_shape_metrics(
+                    cluster
+                )
+            )
+
+            if not self._is_text_like_cluster(
+                metrics,
+                grouped=cluster.get(
+                    "cluster_count",
+                    1,
+                ) > 1,
+            ):
+
+                print(
+                    "[ChangeFilter] "
+                    f"GROUP[{index}] rejected: "
                     f"not text-like "
                     f"(fill_ratio="
                     f"{metrics['fill_ratio']:.3f}, "
@@ -625,11 +812,6 @@ class ChangeFilter:
 
                 continue
 
-            cluster_left = cluster["left"]
-            cluster_top = cluster["top"]
-            cluster_right = cluster["right"]
-            cluster_bottom = cluster["bottom"]
-
             cluster_area = (
                 metrics["area"]
             )
@@ -641,7 +823,7 @@ class ChangeFilter:
 
                 print(
                     "[ChangeFilter] "
-                    f"CLUSTER[{index}] rejected: "
+                    f"GROUP[{index}] rejected: "
                     f"area={cluster_area} "
                     f"< minimum="
                     f"{self.MIN_CLUSTER_AREA}"
@@ -656,25 +838,25 @@ class ChangeFilter:
 
             result_left = max(
                 0,
-                cluster_left
+                cluster["left"]
                 - self.DIFF_PADDING,
             )
 
             result_top = max(
                 0,
-                cluster_top
+                cluster["top"]
                 - self.DIFF_PADDING,
             )
 
             result_right = min(
                 current_crop.width,
-                cluster_right
+                cluster["right"]
                 + self.DIFF_PADDING,
             )
 
             result_bottom = min(
                 current_crop.height,
-                cluster_bottom
+                cluster["bottom"]
                 + self.DIFF_PADDING,
             )
 
@@ -730,6 +912,389 @@ class ChangeFilter:
         )
 
         return result_regions
+
+    # --------------------------------------------------
+    # TEXT CHANGE GROUPING
+    # --------------------------------------------------
+
+    def _group_text_change_clusters(
+        self,
+        clusters,
+    ):
+        """
+        Group nearby compatible pixel-change clusters that
+        are likely parts of the same text line.
+
+        Grouping is deliberately conservative:
+
+        - horizontal separation must be small relative to
+          the cluster height
+        - vertical positions must overlap or remain close
+        - grouping is based on geometry, not large padding
+        - final text-like filtering is still applied to the
+          combined region
+
+        This allows fragmented changes such as individual
+        characters from a typing event to become one OCR
+        region while avoiding broad desktop-wide grouping.
+
+        Returns
+        -------
+        list[dict]
+            Spatially grouped change clusters.
+        """
+
+        if not clusters:
+            return []
+
+        grouped = []
+
+        #
+        # Process clusters in stable reading order.
+        #
+
+        ordered_clusters = sorted(
+            clusters,
+            key=lambda cluster: (
+                cluster["top"],
+                cluster["left"],
+            ),
+        )
+
+        for cluster in ordered_clusters:
+
+            merged = False
+
+            #
+            # Compare against existing groups.
+            #
+            # Iterate from the most recently created group
+            # because text fragments on the same line are
+            # normally spatially close.
+            #
+
+            for group in reversed(grouped):
+
+                if not self._text_clusters_are_compatible(
+                    group,
+                    cluster,
+                ):
+                    continue
+
+                self._merge_cluster_into_group(
+                    group,
+                    cluster,
+                )
+
+                merged = True
+
+                #
+                # A cluster belongs to one spatial text group.
+                #
+
+                break
+
+            if not merged:
+
+                grouped.append(
+                    {
+                        "left": cluster["left"],
+                        "top": cluster["top"],
+                        "right": cluster["right"],
+                        "bottom": cluster["bottom"],
+                        "changed_pixels": (
+                            cluster["changed_pixels"]
+                        ),
+                        "run_count": (
+                            cluster.get(
+                                "run_count",
+                                0,
+                            )
+                        ),
+                        "cluster_count": 1,
+                    }
+                )
+
+        #
+        # One pass can leave a group that has become compatible
+        # with an earlier group after it expanded. Repeatedly
+        # merge compatible groups until stable.
+        #
+        # This is still controlled because every merge must
+        # satisfy the same text-line geometry rules.
+        #
+
+        changed = True
+
+        while changed:
+
+            changed = False
+
+            merged_groups = []
+
+            for group in grouped:
+
+                merged = False
+
+                for existing in merged_groups:
+
+                    if not self._text_clusters_are_compatible(
+                        existing,
+                        group,
+                    ):
+                        continue
+
+                    self._merge_cluster_into_group(
+                        existing,
+                        group,
+                    )
+
+                    merged = True
+                    changed = True
+                    break
+
+                if not merged:
+                    merged_groups.append(
+                        group
+                    )
+
+            grouped = merged_groups
+
+        grouped.sort(
+            key=lambda cluster: (
+                cluster["top"],
+                cluster["left"],
+            )
+        )
+
+        return grouped
+
+    def _text_clusters_are_compatible(
+        self,
+        first,
+        second,
+    ) -> bool:
+        """
+        Determine whether two change clusters are close enough
+        and aligned enough to plausibly belong to the same text
+        line.
+
+        The test intentionally uses the cluster geometry rather
+        than DIFF_PADDING. It therefore does not enlarge every
+        dirty region indiscriminately.
+        """
+
+        first_width = (
+            first["right"]
+            - first["left"]
+        )
+
+        first_height = (
+            first["bottom"]
+            - first["top"]
+        )
+
+        second_width = (
+            second["right"]
+            - second["left"]
+        )
+
+        second_height = (
+            second["bottom"]
+            - second["top"]
+        )
+
+        if first_width <= 0 or first_height <= 0:
+            return False
+
+        if second_width <= 0 or second_height <= 0:
+            return False
+
+        #
+        # Use the smaller cluster height to keep the grouping
+        # conservative when a large UI redraw is near a text
+        # fragment.
+        #
+
+        reference_height = min(
+            first_height,
+            second_height,
+        )
+
+        #
+        # Horizontal gap between the two bounding boxes.
+        #
+        # Negative values mean the boxes overlap horizontally.
+        #
+
+        if first["right"] < second["left"]:
+
+            horizontal_gap = (
+                second["left"]
+                - first["right"]
+            )
+
+        elif second["right"] < first["left"]:
+
+            horizontal_gap = (
+                first["left"]
+                - second["right"]
+            )
+
+        else:
+
+            horizontal_gap = 0
+
+        #
+        # Vertical gap between the two bounding boxes.
+        #
+        # Negative values mean vertical overlap.
+        #
+
+        if first["bottom"] < second["top"]:
+
+            vertical_gap = (
+                second["top"]
+                - first["bottom"]
+            )
+
+        elif second["bottom"] < first["top"]:
+
+            vertical_gap = (
+                first["top"]
+                - second["bottom"]
+            )
+
+        else:
+
+            vertical_gap = 0
+
+        #
+        # Text characters normally have a small horizontal gap.
+        # The limit scales modestly with character height rather
+        # than using a large fixed padding.
+        #
+
+        max_horizontal_gap = max(
+            self.TEXT_GROUP_MAX_HORIZONTAL_GAP,
+            int(
+                reference_height
+                * self.TEXT_GROUP_HORIZONTAL_SCALE
+            ),
+        )
+
+        if (
+            horizontal_gap
+            > max_horizontal_gap
+        ):
+            return False
+
+        #
+        # Text on the same line should vertically overlap or
+        # remain close. This prevents separate lines and distant
+        # UI elements from being joined.
+        #
+
+        max_vertical_gap = max(
+            self.TEXT_GROUP_MAX_VERTICAL_GAP,
+            int(
+                reference_height
+                * self.TEXT_GROUP_VERTICAL_SCALE
+            ),
+        )
+
+        if (
+            vertical_gap
+            > max_vertical_gap
+        ):
+            return False
+
+        #
+        # Require meaningful vertical alignment.
+        #
+        # A pure vertical proximity check is not sufficient for
+        # UI elements stacked near one another.
+        #
+
+        first_center_y = (
+            first["top"]
+            + first["bottom"]
+        ) / 2.0
+
+        second_center_y = (
+            second["top"]
+            + second["bottom"]
+        ) / 2.0
+
+        center_delta = abs(
+            first_center_y
+            - second_center_y
+        )
+
+        max_center_delta = max(
+            self.TEXT_GROUP_MAX_CENTER_DELTA,
+            reference_height
+            * self.TEXT_GROUP_CENTER_SCALE,
+        )
+
+        if (
+            center_delta
+            > max_center_delta
+        ):
+            return False
+
+        return True
+
+    @staticmethod
+    def _merge_cluster_into_group(
+        group,
+        cluster,
+    ):
+        """
+        Merge one change cluster into an existing spatial group.
+        """
+
+        group["left"] = min(
+            group["left"],
+            cluster["left"],
+        )
+
+        group["top"] = min(
+            group["top"],
+            cluster["top"],
+        )
+
+        group["right"] = max(
+            group["right"],
+            cluster["right"],
+        )
+
+        group["bottom"] = max(
+            group["bottom"],
+            cluster["bottom"],
+        )
+
+        group["changed_pixels"] += (
+            cluster["changed_pixels"]
+        )
+
+        group["run_count"] += (
+            cluster.get(
+                "run_count",
+                0,
+            )
+        )
+
+        group["cluster_count"] = (
+            group.get(
+                "cluster_count",
+                1,
+            )
+            + cluster.get(
+                "cluster_count",
+                1,
+            )
+        )
 
     # --------------------------------------------------
     # CLUSTER METRICS
@@ -813,6 +1378,7 @@ class ChangeFilter:
     def _is_text_like_cluster(
         self,
         metrics,
+        grouped=False,
     ) -> bool:
         """
         Determine whether a change cluster has a basic
@@ -837,9 +1403,15 @@ class ChangeFilter:
         ):
             return False
 
+        max_aspect_ratio = (
+            self.MAX_GROUPED_TEXT_ASPECT_RATIO
+            if grouped
+            else self.MAX_TEXT_ASPECT_RATIO
+        )
+
         if (
             metrics["aspect_ratio"]
-            > self.MAX_TEXT_ASPECT_RATIO
+            > max_aspect_ratio
         ):
             return False
 
@@ -867,8 +1439,19 @@ class ChangeFilter:
 
         Changed pixels are converted into horizontal runs.
 
-        Nearby runs on neighboring rows are connected using
-        CLUSTER_DILATION.
+        A run is connected ONLY to runs from the immediately
+        previous image row. CLUSTER_DILATION expands the
+        current and previous runs only for the purpose of
+        determining whether those two rows are connected.
+
+        IMPORTANT
+        ---------
+        Component-wide bounding boxes are never used to
+        establish connectivity with a later row.
+
+        This prevents a large component from progressively
+        "reaching" unrelated pixels and becoming an
+        incorrectly huge cluster.
 
         Returns
         -------
@@ -906,19 +1489,19 @@ class ChangeFilter:
         components = []
 
         #
-        # IMPORTANT:
+        # Each item is:
         #
-        # previous_runs contains ONLY component IDs.
+        #     (run_left, run_right, component_root)
         #
-        # current_runs contains ONLY coordinate tuples.
+        # and represents one run from the immediately
+        # previous image row.
         #
-        # current_component_ids contains ONLY component IDs.
-        #
-        # Keeping these separate prevents an integer component
-        # ID from being accidentally processed as a run tuple.
+        # This is intentionally different from storing
+        # component bounding boxes. Only adjacent rows
+        # participate in connectivity.
         #
 
-        previous_component_ids = []
+        previous_runs = []
 
         for y in range(height):
 
@@ -963,20 +1546,18 @@ class ChangeFilter:
                     (
                         run_left,
                         run_right,
-                        y,
                     )
                 )
 
-            current_component_ids = []
+            current_previous_links = []
 
             #
-            # Process each run from the current row.
+            # Process every changed run on this row.
             #
 
             for (
                 run_left,
                 run_right,
-                run_y,
             ) in current_runs:
 
                 expanded_left = max(
@@ -991,83 +1572,57 @@ class ChangeFilter:
                     + dilation,
                 )
 
-                matching_components = []
+                matching_roots = []
 
                 #
-                # Compare against components active on
-                # the previous row.
+                # Connect ONLY against runs from the
+                # immediately previous row.
                 #
 
-                for component_index in (
-                    previous_component_ids
-                ):
+                for (
+                    previous_left,
+                    previous_right,
+                    previous_root,
+                ) in previous_runs:
 
-                    root_index = (
-                        self._find_component_root(
-                            components,
-                            component_index,
-                        )
+                    previous_expanded_left = max(
+                        0,
+                        previous_left
+                        - dilation,
                     )
 
-                    component = (
-                        components[root_index]
-                    )
-
-                    component_left = (
-                        component["left"]
-                    )
-
-                    component_right = (
-                        component["right"]
-                    )
-
-                    #
-                    # Only the horizontal extent of the
-                    # component on the previous row is
-                    # relevant here.
-                    #
-                    # Because components retain their overall
-                    # bounds, use the previous-row run extents
-                    # stored by the active component.
-                    #
-
-                    active_left = (
-                        component.get(
-                            "active_left",
-                            component_left,
-                        )
-                    )
-
-                    active_right = (
-                        component.get(
-                            "active_right",
-                            component_right,
-                        )
+                    previous_expanded_right = min(
+                        width,
+                        previous_right
+                        + dilation,
                     )
 
                     if (
                         expanded_right
-                        < active_left
+                        <= previous_expanded_left
                         or expanded_left
-                        > active_right
+                        >= previous_expanded_right
                     ):
                         continue
 
-                    if (
-                        root_index
-                        not in matching_components
-                    ):
+                    root = (
+                        self._find_component_root(
+                            components,
+                            previous_root,
+                        )
+                    )
 
-                        matching_components.append(
-                            root_index
+                    if root not in matching_roots:
+                        matching_roots.append(
+                            root
                         )
 
                 #
-                # No matching previous component:
+                # No previous-row connection:
                 # create a new component.
                 #
 
-                if not matching_components:
+                if not matching_roots:
 
                     component_index = (
                         len(components)
@@ -1076,39 +1631,46 @@ class ChangeFilter:
                     components.append(
                         {
                             "left": run_left,
-                            "top": run_y,
+                            "top": y,
                             "right": run_right,
-                            "bottom": run_y + 1,
+                            "bottom": y + 1,
                             "changed_pixels": (
                                 run_right
                                 - run_left
                             ),
                             "run_count": 1,
-                            "active_left": run_left,
-                            "active_right": run_right,
                             "parent": component_index,
                         }
                     )
 
-                    current_component_ids.append(
-                        component_index
+                    current_previous_links.append(
+                        (
+                            run_left,
+                            run_right,
+                            component_index,
+                        )
                     )
 
                     continue
 
                 #
-                # Attach the run to the first matching
-                # component.
+                # Attach the current run to the first
+                # matching component.
                 #
 
-                current_component_index = (
-                    matching_components[0]
+                current_root = (
+                    matching_roots[0]
+                )
+
+                current_root = (
+                    self._find_component_root(
+                        components,
+                        current_root,
+                    )
                 )
 
                 component = (
-                    components[
-                        current_component_index
-                    ]
+                    components[current_root]
                 )
 
                 component["left"] = min(
@@ -1118,7 +1680,7 @@ class ChangeFilter:
 
                 component["top"] = min(
                     component["top"],
-                    run_y,
+                    y,
                 )
 
                 component["right"] = max(
@@ -1128,7 +1690,7 @@ class ChangeFilter:
 
                 component["bottom"] = max(
                     component["bottom"],
-                    run_y + 1,
+                    y + 1,
                 )
 
                 component["changed_pixels"] += (
@@ -1139,120 +1701,67 @@ class ChangeFilter:
                 component["run_count"] += 1
 
                 #
-                # If the run connects multiple previous
-                # components, merge them.
+                # If the current run touches multiple
+                # previous components, those components
+                # become one connected component.
                 #
 
-                for other_index in (
-                    matching_components[1:]
+                for other_root in (
+                    matching_roots[1:]
                 ):
 
-                    current_component_index = (
+                    current_root = (
                         self._merge_components(
                             components,
-                            current_component_index,
-                            other_index,
+                            current_root,
+                            other_root,
                         )
                     )
 
-                current_component_index = (
+                current_root = (
                     self._find_component_root(
                         components,
-                        current_component_index,
+                        current_root,
                     )
                 )
 
-                #
-                # The active horizontal extent for the
-                # current row is the current run, not the
-                # complete component bounds.
-                #
-
-                root_component = (
-                    components[
-                        current_component_index
-                    ]
-                )
-
-                root_component["active_left"] = (
-                    min(
-                        root_component.get(
-                            "active_left",
-                            run_left,
-                        ),
+                current_previous_links.append(
+                    (
                         run_left,
-                    )
-                )
-
-                root_component["active_right"] = (
-                    max(
-                        root_component.get(
-                            "active_right",
-                            run_right,
-                        ),
                         run_right,
+                        current_root,
                     )
                 )
 
-                current_component_ids.append(
-                    current_component_index
-                )
-
             #
-            # Prepare only the unique component IDs that
-            # actually participated in this row.
+            # The next row must see ONLY the runs from
+            # this row.
             #
-
-            previous_component_ids = list(
-                dict.fromkeys(
-                    current_component_ids
-                )
-            )
-
-            #
-            # Reset active extents for the next row.
-            #
-            # They will be replaced by the actual runs
-            # belonging to that next row.
+            # No component-wide bounding boxes are carried
+            # forward.
             #
 
-            for component_index in (
-                previous_component_ids
-            ):
+            previous_runs = []
 
-                root_index = (
+            for (
+                run_left,
+                run_right,
+                component_index,
+            ) in current_previous_links:
+
+                root = (
                     self._find_component_root(
                         components,
                         component_index,
                     )
                 )
 
-                component = (
-                    components[root_index]
-                )
-
-                component["active_left"] = (
-                    component.get(
-                        "_next_active_left",
-                        component["active_left"],
+                previous_runs.append(
+                    (
+                        run_left,
+                        run_right,
+                        root,
                     )
-                )
-
-                component["active_right"] = (
-                    component.get(
-                        "_next_active_right",
-                        component["active_right"],
-                    )
-                )
-
-                component.pop(
-                    "_next_active_left",
-                    None,
-                )
-
-                component.pop(
-                    "_next_active_right",
-                    None,
                 )
 
         #
@@ -1263,8 +1772,8 @@ class ChangeFilter:
 
         seen_roots = set()
 
-        for index, component in enumerate(
-            components
+        for index in range(
+            len(components)
         ):
 
             root = (
