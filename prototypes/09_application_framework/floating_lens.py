@@ -14,7 +14,8 @@ It does NOT:
 It only:
 - Determines its current desktop position and dimensions.
 - Queries the TranslationMap for visible translations.
-- Renders the appropriate translation.
+- Renders each translation at its source-relative position.
+- Uses a fixed readable font size for Lens rendering.
 - Refreshes when the TranslationMap actually changes.
 """
 
@@ -38,6 +39,48 @@ class FloatingLensWindow:
     """
 
     MODULE = "LENS"
+
+    # --------------------------------------------------
+    # Translation Rendering
+    # --------------------------------------------------
+
+    TRANSLATION_FONT_FAMILY = "Segoe UI"
+
+    #
+    # Fixed display font size for the Floating Lens.
+    #
+    # This is intentionally independent of OCR/source
+    # geometry. TranslationMap entry bounds continue to
+    # represent the original source geometry and are not
+    # used to scale the rendered translation text.
+    #
+
+    DEFAULT_LENS_FONT_SIZE = 12
+
+    TRANSLATION_TEXT_COLOR = "white"
+
+    # --------------------------------------------------
+    # Font Grouping
+    # --------------------------------------------------
+
+    #
+    # Maximum vertical separation allowed between adjacent
+    # OCR entries before they are considered separate
+    # visual groups.
+    #
+
+    FONT_GROUP_MAX_GAP = 12
+
+    #
+    # Allows OCR boxes belonging to the same visual text
+    # block to have slightly different horizontal positions.
+    #
+
+    FONT_GROUP_HORIZONTAL_TOLERANCE = 30
+
+    # --------------------------------------------------
+    # Window
+    # --------------------------------------------------
 
     def __init__(
         self,
@@ -87,7 +130,7 @@ class FloatingLensWindow:
         )
 
         self.window.geometry(
-            "380x260+250+200"
+            "700x500+250+200"
         )
 
         self.window.protocol(
@@ -119,10 +162,6 @@ class FloatingLensWindow:
             self.window.update_idletasks()
             self.window.update()
 
-            #
-            # Tkinter's HWND.
-            #
-
             tk_hwnd = int(
                 self.window.winfo_id()
             )
@@ -147,10 +186,6 @@ class FloatingLensWindow:
                 "user32",
                 use_last_error=True,
             )
-
-            #
-            # Resolve the native top-level/root HWND.
-            #
 
             get_ancestor = user32.GetAncestor
 
@@ -185,48 +220,10 @@ class FloatingLensWindow:
                 logger.error(
                     self.MODULE,
                     "Desktop Duplication exclusion failed: "
-                    "unable to resolve native root HWND."
+                    "invalid root HWND."
                 )
 
                 return
-
-            #
-            # Verify the root HWND.
-            #
-
-            is_window = user32.IsWindow
-
-            is_window.argtypes = [
-                ctypes.c_void_p,
-            ]
-
-            is_window.restype = ctypes.c_int
-
-            valid = bool(
-                is_window(
-                    ctypes.c_void_p(root_hwnd)
-                )
-            )
-
-            logger.info(
-                self.MODULE,
-                "Floating Lens root HWND IsWindow: "
-                f"{valid}"
-            )
-
-            if not valid:
-
-                logger.error(
-                    self.MODULE,
-                    "Desktop Duplication exclusion failed: "
-                    "resolved root HWND is invalid."
-                )
-
-                return
-
-            #
-            # WCA_EXCLUDED_FROM_DDA
-            #
 
             WCA_EXCLUDED_FROM_DDA = 24
 
@@ -384,18 +381,16 @@ class FloatingLensWindow:
             expand=True
         )
 
-        self.translation_label = tk.Label(
+        self.translation_canvas = tk.Canvas(
             self.content,
-            text="Waiting for translation...",
-            font=("Segoe UI", 12),
-            justify="center",
-            wraplength=320
+            bd=0,
+            highlightthickness=0,
+            relief="flat",
         )
 
-        self.translation_label.pack(
-            expand=True,
-            padx=20,
-            pady=20
+        self.translation_canvas.pack(
+            fill="both",
+            expand=True
         )
 
         self.status_bar = tk.Frame(
@@ -474,13 +469,6 @@ class FloatingLensWindow:
 
         self.window.update_idletasks()
         self.window.update()
-
-        #
-        # IMPORTANT:
-        #
-        # Apply Desktop Duplication exclusion only
-        # after the Floating Lens is actually visible.
-        #
 
         self._exclude_from_desktop_duplication()
 
@@ -705,7 +693,430 @@ class FloatingLensWindow:
             entries
         )
 
-    def render_entries(self, entries):
+    # --------------------------------------------------
+    # Font Grouping Helpers
+    # --------------------------------------------------
+
+    def _get_entry_bounds(
+        self,
+        entry,
+    ):
+        """
+        Return valid TranslationMap bounds or None.
+        """
+
+        bounds = getattr(
+            entry,
+            "bounds",
+            None
+        )
+
+        if not bounds or len(bounds) != 4:
+
+            return None
+
+        try:
+
+            left = float(bounds[0])
+            top = float(bounds[1])
+            width = float(bounds[2])
+            height = float(bounds[3])
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            return None
+
+        if width <= 0 or height <= 0:
+
+            return None
+
+        return (
+            left,
+            top,
+            width,
+            height,
+        )
+
+    def _entries_are_same_font_group(
+        self,
+        entry,
+        group,
+    ):
+        """
+        Determine whether an entry belongs to the same
+        visual text group as the existing group.
+
+        Grouping uses only source geometry.
+
+        It does not modify TranslationMap entries or
+        their positions.
+
+        The grouping is retained for future Lens layout
+        work, but it no longer determines font size.
+        """
+
+        entry_bounds = self._get_entry_bounds(
+            entry
+        )
+
+        if entry_bounds is None:
+            return False
+
+        if not group:
+            return True
+
+        (
+            entry_left,
+            entry_top,
+            entry_width,
+            entry_height,
+        ) = entry_bounds
+
+        group_bounds = [
+            self._get_entry_bounds(
+                item
+            )
+            for item in group
+        ]
+
+        group_bounds = [
+            bounds
+            for bounds in group_bounds
+            if bounds is not None
+        ]
+
+        if not group_bounds:
+            return False
+
+        group_left = min(
+            bounds[0]
+            for bounds in group_bounds
+        )
+
+        group_right = max(
+            bounds[0] + bounds[2]
+            for bounds in group_bounds
+        )
+
+        group_top = min(
+            bounds[1]
+            for bounds in group_bounds
+        )
+
+        group_bottom = max(
+            bounds[1] + bounds[3]
+            for bounds in group_bounds
+        )
+
+        #
+        # Vertical relationship.
+        #
+
+        entry_bottom = (
+            entry_top
+            + entry_height
+        )
+
+        if entry_top >= group_bottom:
+
+            vertical_gap = (
+                entry_top
+                - group_bottom
+            )
+
+        elif group_top >= entry_bottom:
+
+            vertical_gap = (
+                group_top
+                - entry_bottom
+            )
+
+        else:
+
+            vertical_gap = 0
+
+        if vertical_gap > max(
+            self.FONT_GROUP_MAX_GAP,
+            min(
+                entry_height,
+                max(
+                    bounds[3]
+                    for bounds in group_bounds
+                ),
+            ) * 0.75,
+        ):
+
+            return False
+
+        #
+        # Horizontal relationship.
+        #
+
+        entry_right = (
+            entry_left
+            + entry_width
+        )
+
+        horizontal_overlap = (
+            min(
+                entry_right,
+                group_right,
+            )
+            - max(
+                entry_left,
+                group_left,
+            )
+        )
+
+        left_alignment = abs(
+            entry_left
+            - group_left
+        )
+
+        if (
+            horizontal_overlap <= 0
+            and left_alignment
+            > self.FONT_GROUP_HORIZONTAL_TOLERANCE
+        ):
+
+            return False
+
+        return True
+
+    def _group_entries_for_font_sizing(
+        self,
+        entries,
+    ):
+        """
+        Group visually related TranslationMap entries.
+
+        Grouping is retained as a source-geometry helper,
+        but representative OCR height no longer controls
+        Lens font size.
+        """
+
+        groups = []
+
+        current_group = []
+
+        sorted_entries = (
+            self._sort_entries_for_rendering(
+                entries
+            )
+        )
+
+        for entry in sorted_entries:
+
+            if not self._get_entry_bounds(
+                entry
+            ):
+
+                if current_group:
+
+                    groups.append(
+                        current_group
+                    )
+
+                    current_group = []
+
+                continue
+
+            if not current_group:
+
+                current_group = [
+                    entry
+                ]
+
+                continue
+
+            if self._entries_are_same_font_group(
+                entry,
+                current_group,
+            ):
+
+                current_group.append(
+                    entry
+                )
+
+            else:
+
+                groups.append(
+                    current_group
+                )
+
+                current_group = [
+                    entry
+                ]
+
+        if current_group:
+
+            groups.append(
+                current_group
+            )
+
+        logger.info(
+            self.MODULE,
+            "Floating Lens visual grouping: "
+            f"groups={len(groups)}, "
+            f"entries={len(sorted_entries)}, "
+            f"font_size="
+            f"{self.DEFAULT_LENS_FONT_SIZE}"
+        )
+
+        return groups
+
+    # --------------------------------------------------
+    # Entry Sorting
+    # --------------------------------------------------
+
+    def _sort_entries_for_rendering(
+        self,
+        entries,
+    ):
+        """
+        Sort TranslationMap entries in normal reading order.
+
+        Entries are ordered from top to bottom and then
+        left to right.
+        """
+
+        def sort_key(entry):
+
+            bounds = getattr(
+                entry,
+                "bounds",
+                None
+            )
+
+            if not bounds or len(bounds) != 4:
+
+                return (
+                    float("inf"),
+                    float("inf"),
+                )
+
+            return (
+                bounds[1],
+                bounds[0],
+            )
+
+        return sorted(
+            entries,
+            key=sort_key,
+        )
+
+    # --------------------------------------------------
+    # Entry Rendering
+    # --------------------------------------------------
+
+    def _render_translation_entry(
+        self,
+        entry,
+        viewport_bounds,
+        font_size,
+    ):
+        """
+        Render one TranslationMap entry.
+
+        The original source-relative position is preserved.
+
+        The font size is controlled independently from
+        source OCR geometry.
+        """
+
+        translation = getattr(
+            entry,
+            "translation",
+            ""
+        )
+
+        if not translation:
+
+            return None
+
+        entry_bounds = self._get_entry_bounds(
+            entry
+        )
+
+        if entry_bounds is None:
+
+            logger.warning(
+                self.MODULE,
+                "Skipping TranslationMap entry because "
+                "bounds are invalid."
+            )
+
+            return None
+
+        (
+            entry_left,
+            entry_top,
+            entry_width,
+            entry_height,
+        ) = entry_bounds
+
+        (
+            viewport_left,
+            viewport_top,
+            viewport_width,
+            viewport_height,
+        ) = viewport_bounds
+
+        #
+        # Preserve exact source-relative position.
+        #
+
+        relative_left = (
+            entry_left
+            - viewport_left
+        )
+
+        relative_top = (
+            entry_top
+            - viewport_top
+        )
+
+        font = (
+            self.TRANSLATION_FONT_FAMILY,
+            font_size,
+        )
+
+        logger.info(
+            self.MODULE,
+            "Rendering translation entry: "
+            f"source_bounds={entry.bounds}, "
+            f"viewport={viewport_bounds}, "
+            f"relative_position=("
+            f"{relative_left}, "
+            f"{relative_top}), "
+            f"font_size={font_size}, "
+            f"clamped=False"
+        )
+
+        return self.translation_canvas.create_text(
+            relative_left,
+            relative_top,
+            anchor="nw",
+            text=translation,
+            font=font,
+            fill=self.TRANSLATION_TEXT_COLOR,
+        )
+
+    # --------------------------------------------------
+    # Render Entries
+    # --------------------------------------------------
+
+    def render_entries(
+        self,
+        entries,
+    ):
+
+        self.translation_canvas.delete(
+            "all"
+        )
 
         if not entries:
 
@@ -720,17 +1131,44 @@ class FloatingLensWindow:
 
             return
 
-        translations = []
+        viewport_bounds = (
+            self.get_viewport_bounds()
+        )
+
+        entries = (
+            self._sort_entries_for_rendering(
+                entries
+            )
+        )
+
+        #
+        # Source geometry is used only for positioning
+        # and visual ordering.
+        #
+        # Lens display font size is fixed independently.
+        #
+
+        font_size = (
+            self.DEFAULT_LENS_FONT_SIZE
+        )
+
+        rendered_count = 0
 
         for entry in entries:
 
-            if entry.translation:
-
-                translations.append(
-                    entry.translation
+            item_id = (
+                self._render_translation_entry(
+                    entry,
+                    viewport_bounds,
+                    font_size,
                 )
+            )
 
-        if not translations:
+            if item_id is not None:
+
+                rendered_count += 1
+
+        if rendered_count == 0:
 
             self.set_translation(
                 ""
@@ -743,15 +1181,16 @@ class FloatingLensWindow:
 
             return
 
-        self.set_translation(
-            "\n\n".join(
-                translations
-            )
-        )
-
         self.set_status(
             "Translation Available",
             "green",
+        )
+
+        logger.info(
+            self.MODULE,
+            "Floating Lens rendered "
+            f"{rendered_count} translation entry(ies) "
+            f"at font_size={font_size}."
         )
 
     # --------------------------------------------------
@@ -763,18 +1202,42 @@ class FloatingLensWindow:
         text,
     ):
 
+        self.translation_canvas.delete(
+            "all"
+        )
+
         if not text:
 
             text = "No translation in view."
 
-        self.translation_label.config(
-            text=text
+        self.translation_canvas.create_text(
+            self.translation_canvas.winfo_width() // 2,
+            self.translation_canvas.winfo_height() // 2,
+            anchor="center",
+            text=text,
+            font=(
+                self.TRANSLATION_FONT_FAMILY,
+                12,
+            ),
+            fill=self.TRANSLATION_TEXT_COLOR,
         )
 
     def clear_translation(self):
 
-        self.translation_label.config(
-            text="Waiting for translation..."
+        self.translation_canvas.delete(
+            "all"
+        )
+
+        self.translation_canvas.create_text(
+            self.translation_canvas.winfo_width() // 2,
+            self.translation_canvas.winfo_height() // 2,
+            anchor="center",
+            text="Waiting for translation...",
+            font=(
+                self.TRANSLATION_FONT_FAMILY,
+                12,
+            ),
+            fill=self.TRANSLATION_TEXT_COLOR,
         )
 
     def set_status(
@@ -844,10 +1307,6 @@ class FloatingLensWindow:
 
         self.window.update_idletasks()
 
-        #
-        # Tkinter-reported content coordinates.
-        #
-
         tk_left = (
             self.content.winfo_rootx()
         )
@@ -864,10 +1323,6 @@ class FloatingLensWindow:
             self.content.winfo_height()
         )
 
-        #
-        # Tkinter-reported top-level coordinates.
-        #
-
         window_x = (
             self.window.winfo_x()
         )
@@ -883,10 +1338,6 @@ class FloatingLensWindow:
         window_height = (
             self.window.winfo_height()
         )
-
-        #
-        # Native HWND diagnostics.
-        #
 
         hwnd = 0
         native_left = 0
@@ -929,43 +1380,17 @@ class FloatingLensWindow:
 
             rect = RECT()
 
-            get_window_rect = (
-                user32.GetWindowRect
+            result = user32.GetWindowRect(
+                ctypes.c_void_p(hwnd),
+                ctypes.byref(rect),
             )
 
-            get_window_rect.argtypes = [
-                ctypes.c_void_p,
-                ctypes.POINTER(RECT),
-            ]
+            if result:
 
-            get_window_rect.restype = (
-                ctypes.c_bool
-            )
-
-            native_success = (
-                get_window_rect(
-                    ctypes.c_void_p(hwnd),
-                    ctypes.byref(rect),
-                )
-            )
-
-            if native_success:
-
-                native_left = int(
-                    rect.left
-                )
-
-                native_top = int(
-                    rect.top
-                )
-
-                native_right = int(
-                    rect.right
-                )
-
-                native_bottom = int(
-                    rect.bottom
-                )
+                native_left = rect.left
+                native_top = rect.top
+                native_right = rect.right
+                native_bottom = rect.bottom
 
         except Exception as error:
 
@@ -975,14 +1400,17 @@ class FloatingLensWindow:
                 f"diagnostic failed: {error}"
             )
 
-        #
-        # Windows virtual desktop diagnostics.
-        #
+        native_window_rect = (
+            native_left,
+            native_top,
+            native_right,
+            native_bottom,
+        )
 
         virtual_left = 0
         virtual_top = 0
-        virtual_width = 0
-        virtual_height = 0
+        virtual_right = 0
+        virtual_bottom = 0
 
         try:
 
@@ -991,51 +1419,70 @@ class FloatingLensWindow:
                 use_last_error=True,
             )
 
-            #
-            # SM_XVIRTUALSCREEN = 76
-            # SM_YVIRTUALSCREEN = 77
-            # SM_CXVIRTUALSCREEN = 78
-            # SM_CYVIRTUALSCREEN = 79
-            #
+            SM_XVIRTUALSCREEN = 76
+            SM_YVIRTUALSCREEN = 77
+            SM_CXVIRTUALSCREEN = 78
+            SM_CYVIRTUALSCREEN = 79
 
-            virtual_left = int(
-                user32.GetSystemMetrics(76)
+            virtual_left = user32.GetSystemMetrics(
+                SM_XVIRTUALSCREEN
             )
 
-            virtual_top = int(
-                user32.GetSystemMetrics(77)
+            virtual_top = user32.GetSystemMetrics(
+                SM_YVIRTUALSCREEN
             )
 
-            virtual_width = int(
-                user32.GetSystemMetrics(78)
+            virtual_width = user32.GetSystemMetrics(
+                SM_CXVIRTUALSCREEN
             )
 
-            virtual_height = int(
-                user32.GetSystemMetrics(79)
+            virtual_height = user32.GetSystemMetrics(
+                SM_CYVIRTUALSCREEN
+            )
+
+            virtual_right = (
+                virtual_left
+                + virtual_width
+            )
+
+            virtual_bottom = (
+                virtual_top
+                + virtual_height
             )
 
         except Exception as error:
 
             logger.warning(
                 self.MODULE,
-                "Windows virtual desktop coordinate "
-                f"diagnostic failed: {error}"
+                "Windows virtual desktop diagnostic "
+                f"failed: {error}"
             )
+
+        windows_virtual_desktop = (
+            virtual_left,
+            virtual_top,
+            virtual_right,
+            virtual_bottom,
+        )
 
         logger.info(
             self.MODULE,
             "Floating Lens coordinate diagnostic: "
-            f"tk_content=({tk_left}, {tk_top}, "
-            f"{tk_width}, {tk_height}), "
-            f"tk_window=({window_x}, {window_y}, "
-            f"{window_width}, {window_height}), "
+            f"tk_content=("
+            f"{tk_left}, "
+            f"{tk_top}, "
+            f"{tk_width}, "
+            f"{tk_height}), "
+            f"tk_window=("
+            f"{window_x}, "
+            f"{window_y}, "
+            f"{window_width}, "
+            f"{window_height}), "
             f"hwnd={hwnd}, "
-            f"native_window_rect=({native_left}, "
-            f"{native_top}, {native_right}, "
-            f"{native_bottom}), "
-            f"windows_virtual_desktop=("
-            f"{virtual_left}, {virtual_top}, "
-            f"{virtual_width}, {virtual_height})"
+            f"native_window_rect="
+            f"{native_window_rect}, "
+            f"windows_virtual_desktop="
+            f"{windows_virtual_desktop}"
         )
 
         bounds = (
@@ -1083,9 +1530,8 @@ class FloatingLensWindow:
             bg="#2B2B2B"
         )
 
-        self.translation_label.configure(
-            bg="#2B2B2B",
-            fg="white"
+        self.translation_canvas.configure(
+            bg="#2B2B2B"
         )
 
         self.status_bar.configure(

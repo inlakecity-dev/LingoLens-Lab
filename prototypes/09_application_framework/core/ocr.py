@@ -13,6 +13,8 @@ Positional OCR is used by the TranslationMap to
 associate translated text with desktop coordinates.
 """
 
+import logging
+
 import pytesseract
 
 from config import (
@@ -20,6 +22,9 @@ from config import (
     OCR_LANGUAGE_MAP,
     DEFAULT_OCR_LANGUAGES,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------
@@ -103,6 +108,102 @@ def extract_text(
 
 
 # ------------------------------------------------------------
+# OCR Diagnostics
+# ------------------------------------------------------------
+
+def _log_ocr_diagnostics(results):
+    """
+    Log a compact confidence summary for positional OCR.
+
+    This function is diagnostic only.
+
+    It does not modify, filter, reorder, or otherwise
+    alter OCR results.
+    """
+
+    if not results:
+        logger.info(
+            "OCR diagnostics: no OCR results."
+        )
+        return
+
+    confidences = [
+        result["confidence"]
+        for result in results
+        if result["confidence"] >= 0
+    ]
+
+    if not confidences:
+        logger.info(
+            "OCR diagnostics: %d result(s), "
+            "no valid confidence values.",
+            len(results),
+        )
+        return
+
+    average_confidence = (
+        sum(confidences) / len(confidences)
+    )
+
+    below_50 = sum(
+        confidence < 50
+        for confidence in confidences
+    )
+
+    below_70 = sum(
+        confidence < 70
+        for confidence in confidences
+    )
+
+    below_80 = sum(
+        confidence < 80
+        for confidence in confidences
+    )
+
+    low_confidence_results = [
+        result
+        for result in results
+        if 0 <= result["confidence"] < 50
+    ]
+
+    low_confidence_results.sort(
+        key=lambda result: result["confidence"]
+    )
+
+    low_confidence_sample = [
+        (
+            result["text"],
+            round(result["confidence"], 1),
+        )
+        for result in low_confidence_results[:10]
+    ]
+
+    logger.info(
+        "OCR diagnostics: results=%d, "
+        "confidence_avg=%.1f, "
+        "confidence_min=%.1f, "
+        "confidence_max=%.1f, "
+        "below50=%d, "
+        "below70=%d, "
+        "below80=%d.",
+        len(results),
+        average_confidence,
+        min(confidences),
+        max(confidences),
+        below_50,
+        below_70,
+        below_80,
+    )
+
+    if low_confidence_sample:
+        logger.info(
+            "OCR diagnostics: lowest-confidence "
+            "results=%s",
+            low_confidence_sample,
+        )
+
+
+# ------------------------------------------------------------
 # Positional OCR
 # ------------------------------------------------------------
 
@@ -133,7 +234,8 @@ def extract_text_data(
         Tesseract Page Segmentation Mode.
 
         Default:
-            3 - Fully automatic page segmentation.
+            3 - Fully automatic page segmentation,
+                but no OSD.
 
         Live Mode may explicitly use:
             7 - Treat image as a single text line.
@@ -168,21 +270,15 @@ def extract_text_data(
     )
 
     # --------------------------------------------------------
-    # Tesseract page segmentation
+    # Tesseract page segmentation and OCR engine
     #
-    # Manual Rectangle Mode normally captures a larger
-    # workspace containing multiple lines and text blocks.
-    #
-    # Therefore the default is PSM 3:
-    #
-    #     Fully automatic page segmentation.
-    #
-    # Live Mode can explicitly request PSM 7 when processing
-    # a tightly bounded single-line changed region.
+    # OEM 1 explicitly selects Tesseract's LSTM OCR engine.
+    # PSM remains configurable so existing callers keep their
+    # current page-segmentation behavior.
     # --------------------------------------------------------
 
     positional_ocr_config = (
-        f"--psm {psm}"
+        f"--oem 1 --psm {psm}"
     )
 
     data = pytesseract.image_to_data(
@@ -265,5 +361,14 @@ def extract_text_data(
                 ),
             }
         )
+
+    # --------------------------------------------------------
+    # Diagnostic logging
+    #
+    # IMPORTANT:
+    # The OCR results themselves are not changed.
+    # --------------------------------------------------------
+
+    _log_ocr_diagnostics(results)
 
     return results

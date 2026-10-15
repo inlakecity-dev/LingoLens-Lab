@@ -921,6 +921,8 @@ def capture_desktop_state() -> dict:
 
     native_image = DVEPB_Image()
 
+    image_captured = False
+
     with _native_lock:
 
         try:
@@ -936,6 +938,8 @@ def capture_desktop_state() -> dict:
                     "DesktopVisionEngine failed to "
                     "capture unified desktop state."
                 )
+
+            image_captured = True
 
             if not native_image.pixels:
                 raise RuntimeError(
@@ -1029,9 +1033,10 @@ def capture_desktop_state() -> dict:
 
         finally:
 
-            _bridge_dll.DVEPB_FreeImage(
-                ctypes.byref(native_image)
-            )
+            if image_captured:
+                _bridge_dll.DVEPB_FreeImage(
+                    ctypes.byref(native_image)
+                )
 
 
 # ------------------------------------------------------------
@@ -1106,6 +1111,8 @@ def capture_fullscreen() -> Image.Image:
 
     native_image = DVEPB_Image()
 
+    image_captured = False
+
     with _native_lock:
 
         try:
@@ -1119,6 +1126,8 @@ def capture_fullscreen() -> Image.Image:
                     "DesktopVisionEngine failed to "
                     "capture the desktop."
                 )
+
+            image_captured = True
 
             if not native_image.pixels:
                 raise RuntimeError(
@@ -1202,9 +1211,10 @@ def capture_fullscreen() -> Image.Image:
 
         finally:
 
-            _bridge_dll.DVEPB_FreeImage(
-                ctypes.byref(native_image)
-            )
+            if image_captured:
+                _bridge_dll.DVEPB_FreeImage(
+                    ctypes.byref(native_image)
+                )
 
 
 # ------------------------------------------------------------

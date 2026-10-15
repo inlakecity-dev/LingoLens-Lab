@@ -1,39 +1,3 @@
-"""
-core/controller_live.py
-
-Controller Live Mode
-
-Coordinates the Live Translation workflow.
-
-## Responsibilities
-
-- Start Live Mode.
-- Stop Live Mode.
-- Receive unified desktop acquisition state.
-- Pass dirty-region metadata through UIFilter.
-- Pass complete desktop frames through ChangeFilter.
-- Retain the latest complete desktop image.
-- Retain only the latest meaningful filtered dirty regions.
-- Coalesce dirty regions within the latest desktop state.
-- Prevent historical dirty regions from accumulating while
-  OCR/translation is busy.
-- Crop changed regions from the latest acquired desktop image.
-- Discard stale processing results only when the processed
-  region itself changed again.
-- Update the TranslationMap.
-- Generate a debug TranslationMap snapshot.
-- Exclude LingoLens-owned windows from desktop capture.
-
-This class does NOT:
-
-- Perform OCR
-- Perform Translation
-- Capture desktop regions directly
-- Own the TranslationMap
-- Own the DesktopObserver
-- Perform pixel-difference analysis directly
-"""
-
 from __future__ import annotations
 
 import ctypes
@@ -76,8 +40,10 @@ class ControllerLive:
         - historical dirty regions are NOT accumulated
         - a newer desktop generation does not automatically
           invalidate an existing result
-        - only a change overlapping the region being processed
+        - only a change overlapping an individual OCR result
           makes that result stale
+        - unaffected OCR results from the completed batch
+          remain eligible for TranslationMap commit
         - remaining regions from an older generation are
           abandoned when a newer generation is waiting
 
@@ -100,14 +66,6 @@ class ControllerLive:
 
     LIVE_SETTLE_DELAY = 0.20
 
-    #
-    # The initial desktop frame is used as the
-    # ChangeFilter baseline.
-    #
-    # IMPORTANT:
-    #
-    # We still OCR the initial complete desktop separately.
-    #
     INITIAL_FULL_DESKTOP_OCR = True
 
     MAX_COALESCED_DESKTOP_AREA_RATIO = 0.35
@@ -670,15 +628,6 @@ class ControllerLive:
         # --------------------------------------------------
         # Layer 2 - structural UI filtering
         # --------------------------------------------------
-        #
-        # IMPORTANT:
-        #
-        # Only dirty-region metadata is filtered here.
-        #
-        # The complete desktop image remains unchanged so
-        # ChangeFilter can maintain a synchronized
-        # previous/current desktop baseline.
-        #
 
         try:
 
@@ -747,19 +696,6 @@ class ControllerLive:
         # --------------------------------------------------
 
         if is_initial_state:
-
-            #
-            # ChangeFilter must see the first complete frame
-            # as its baseline.
-            #
-            # It normally reports the initial frame as a full
-            # desktop change. That change is intentionally NOT
-            # used as ChangeFilter output.
-            #
-            # Instead, when initial full-desktop OCR is enabled,
-            # the same already-captured complete image is queued
-            # directly as one OCR region.
-            #
 
             if self.INITIAL_FULL_DESKTOP_OCR:
 
@@ -843,6 +779,19 @@ class ControllerLive:
         # No meaningful pixel change
         # --------------------------------------------------
 
+        if move_regions:
+
+            try:
+
+                self._apply_move_regions(move_regions)
+
+            except Exception as error:
+
+                logger.error(
+                    self.MODULE,
+                    f"Failed to apply move regions: {error}"
+                )
+
         if not filtered_regions:
 
             if dxgi_dirty_regions:
@@ -863,21 +812,12 @@ class ControllerLive:
 
                 logger.info(
                     self.MODULE,
-                    "Desktop move region(s) received, but "
-                    "no dirty region produced OCR work."
+                    "Desktop move region(s) applied via "
+                    "TranslationMap repositioning; no OCR "
+                    "region queued."
                 )
 
             return
-
-        logger.info(
-            self.MODULE,
-            "Desktop state changed "
-            f"({len(dxgi_dirty_regions)} DXGI dirty region(s), "
-            f"{len(ui_filtered_regions)} Layer 2 retained "
-            f"region(s), "
-            f"{len(filtered_regions)} ChangeFilter region(s), "
-            f"{len(move_regions)} move region(s))."
-        )
 
         # --------------------------------------------------
         # Diagnostic filtered-region logging
@@ -933,6 +873,70 @@ class ControllerLive:
         self._work_event.set()
 
     # --------------------------------------------------
+    # MOVE REGION HANDLING
+    # --------------------------------------------------
+
+    def _apply_move_regions(self, move_regions):
+        """
+        Reposition existing TranslationMap entries for
+        scroll/window-move regions, without waiting for OCR.
+        """
+
+        for move_region in move_regions:
+
+            dest_left = move_region.destination_left
+            dest_top = move_region.destination_top
+            dest_right = move_region.destination_right
+            dest_bottom = move_region.destination_bottom
+
+            source_x = move_region.source_x
+            source_y = move_region.source_y
+
+            dx = dest_left - source_x
+            dy = dest_top - source_y
+
+            if dx == 0 and dy == 0:
+                continue
+
+            dest_width = dest_right - dest_left
+            dest_height = dest_bottom - dest_top
+
+            if dest_width <= 0 or dest_height <= 0:
+
+                logger.warning(
+                    self.MODULE,
+                    "Skipping invalid move region: "
+                    f"destination=({dest_left}, {dest_top}, "
+                    f"{dest_right}, {dest_bottom})"
+                )
+
+                continue
+
+            source_bounds = (
+                source_x,
+                source_y,
+                dest_width,
+                dest_height,
+            )
+
+            moved_count = (
+                self.controller.translation_map.move_entries_in_region(
+                    source_bounds,
+                    dx,
+                    dy,
+                )
+            )
+
+            logger.info(
+                self.MODULE,
+                f"Repositioned {moved_count} TranslationMap "
+                f"entr{'y' if moved_count == 1 else 'ies'} "
+                f"by (dx={dx}, dy={dy}) for move region "
+                f"source={source_bounds}, "
+                f"dest=({dest_left}, {dest_top}, {dest_right}, {dest_bottom})."
+            )
+
+    # --------------------------------------------------
     # WORKER LOOP
     # --------------------------------------------------
 
@@ -978,6 +982,99 @@ class ControllerLive:
 
             if not dirty_regions:
                 continue
+
+            #
+            # Incremental Live OCR/translation is allowed only
+            # after the latest meaningful desktop generation has
+            # remained unchanged for at least three seconds.
+            # The initial full-desktop bootstrap is intentionally
+            # excluded from this stability gate.
+            #
+
+            is_initial_full_desktop = False
+
+            try:
+
+                (
+                    desktop_left,
+                    desktop_top,
+                    desktop_width,
+                    desktop_height,
+                ) = get_desktop_bounds()
+
+                desktop_right = (
+                    desktop_left
+                    + desktop_width
+                )
+
+                desktop_bottom = (
+                    desktop_top
+                    + desktop_height
+                )
+
+                if len(dirty_regions) == 1:
+
+                    initial_region = dirty_regions[0]
+
+                    is_initial_full_desktop = (
+                        initial_region.left == desktop_left
+                        and initial_region.top == desktop_top
+                        and initial_region.right == desktop_right
+                        and initial_region.bottom == desktop_bottom
+                    )
+
+            except Exception:
+
+                is_initial_full_desktop = False
+
+            if not is_initial_full_desktop:
+
+                while True:
+
+                    if self._stop_event.wait(3.0):
+                        break
+
+                    if self._stop_event.is_set():
+                        break
+
+                    with self._pending_lock:
+                        latest_generation = self._generation
+
+                    if latest_generation == generation:
+                        break
+
+                    logger.info(
+                        self.MODULE,
+                        "Live generation "
+                        f"{generation} changed during the "
+                        "3-second stability window. "
+                        "Waiting for the newest generation to "
+                        "remain stable before OCR/translation."
+                    )
+
+                    latest_pending = self._get_pending_work()
+
+                    if latest_pending is None:
+                        continue
+
+                    (
+                        desktop_state,
+                        dirty_regions,
+                        generation,
+                    ) = latest_pending
+
+                    if not desktop_state:
+                        break
+
+                    if not dirty_regions:
+                        break
+
+                if self._stop_event.is_set():
+                    break
+
+                with self._pending_lock:
+                    if self._generation != generation:
+                        continue
 
             try:
 
@@ -1062,47 +1159,77 @@ class ControllerLive:
         Return True when a newer desktop generation has
         arrived while the supplied generation is being
         processed.
+
+        This check is intentionally used only between
+        dirty regions. A newer generation does not by itself
+        invalidate the completed results of a region that
+        has already been processed.
         """
 
         with self._pending_lock:
 
             return self._generation > generation
 
-    def _has_region_changed_since_processing(
-        self,
-        region,
-    ):
+    def _get_newer_pending_regions(self):
         """
-        Return True when a newer desktop acquisition contains
-        a filtered dirty region that overlaps or touches the
-        region currently being processed.
+        Return a snapshot of the currently pending filtered
+        dirty regions.
+
+        The caller uses these regions to determine which
+        individual OCR entries from a completed batch were
+        affected by newer desktop changes.
         """
-
-        if not self.running:
-            return True
-
-        if self._stop_event.is_set():
-            return True
 
         with self._pending_lock:
 
-            pending_regions = list(
+            return list(
                 self._pending_dirty_regions
             )
+
+    def _entry_overlaps_pending_change(
+        self,
+        entry_bounds,
+        pending_regions,
+    ):
+        """
+        Return True when an individual OCR result entry
+        overlaps or touches any newer pending dirty region.
+
+        Bounds formats:
+
+            entry_bounds:
+                (left, top, width, height)
+
+            pending region:
+                DesktopChangeRegion
+        """
 
         if not pending_regions:
             return False
 
-        current = (
-            region.left,
-            region.top,
-            region.right,
-            region.bottom,
+        entry_left = entry_bounds[0]
+        entry_top = entry_bounds[1]
+
+        entry_right = (
+            entry_left
+            + entry_bounds[2]
+        )
+
+        entry_bottom = (
+            entry_top
+            + entry_bounds[3]
+        )
+
+        entry_rectangle = (
+            entry_left,
+            entry_top,
+            entry_right,
+            entry_bottom,
         )
 
         for pending_region in pending_regions:
 
-            pending = (
+            pending_rectangle = (
                 pending_region.left,
                 pending_region.top,
                 pending_region.right,
@@ -1110,8 +1237,8 @@ class ControllerLive:
             )
 
             if self._regions_touch_or_overlap(
-                current,
-                pending,
+                entry_rectangle,
+                pending_rectangle,
             ):
 
                 return True
@@ -1121,6 +1248,48 @@ class ControllerLive:
     # --------------------------------------------------
     # DESKTOP REGION HELPERS
     # --------------------------------------------------
+
+    @staticmethod
+    def _bounds_intersect(
+        first_bounds,
+        second_bounds,
+    ):
+        """
+        Return True when two TranslationMap-style bounds
+        rectangles have a positive-area intersection.
+
+        Bounds format:
+
+            (left, top, width, height)
+
+        This helper is diagnostic only. It does not modify
+        TranslationMap state.
+        """
+
+        first_left = first_bounds[0]
+        first_top = first_bounds[1]
+        first_right = (
+            first_left + first_bounds[2]
+        )
+        first_bottom = (
+            first_top + first_bounds[3]
+        )
+
+        second_left = second_bounds[0]
+        second_top = second_bounds[1]
+        second_right = (
+            second_left + second_bounds[2]
+        )
+        second_bottom = (
+            second_top + second_bounds[3]
+        )
+
+        return (
+            first_left < second_right
+            and second_left < first_right
+            and first_top < second_bottom
+            and second_top < first_bottom
+        )
 
     def _coalesce_dirty_regions(
         self,
@@ -1321,11 +1490,15 @@ class ControllerLive:
 
         No additional desktop capture is performed here.
 
-        A result is discarded only when:
+        A completed OCR/translation result is discarded only
+        when:
 
             1. Live Mode has stopped, or
-            2. the same/overlapping region changed again while
-               OCR/translation was running.
+            2. an individual returned OCR entry overlaps a
+               newer pending dirty region.
+
+        This allows unaffected entries from the same completed
+        OCR batch to be retained.
         """
 
         desktop_image = desktop_state.get(
@@ -1493,6 +1666,7 @@ class ControllerLive:
             # another normal desktop generation arrived while
             # the initial OCR was running.
             #
+
             is_initial_full_desktop_region = (
                 left == desktop_left
                 and top == desktop_top
@@ -1500,24 +1674,15 @@ class ControllerLive:
                 and bottom == desktop_bottom
             )
 
-            if (
-                not is_initial_full_desktop_region
-                and self._has_region_changed_since_processing(
-                    dirty_region
-                )
-            ):
+            if result_status != "success":
 
                 logger.info(
                     self.MODULE,
-                    "Discarding stale Live result for "
-                    f"region {dirty_region.bounds}: "
-                    "the same/overlapping region changed "
-                    "again during processing."
+                    "Live pipeline did not return a successful "
+                    f"result for region {dirty_region.bounds}: "
+                    f"status={result_status}."
                 )
 
-                continue
-
-            if result_status != "success":
                 continue
 
             entries = result_entries
@@ -1532,18 +1697,160 @@ class ControllerLive:
 
                 return
 
-            if (
-                not is_initial_full_desktop_region
-                and self._has_region_changed_since_processing(
-                    dirty_region
+            # --------------------------------------------------
+            # Determine which completed OCR entries are still
+            # valid against newer pending desktop changes.
+            # --------------------------------------------------
+
+            committable_entries = list(
+                entries
+            )
+
+            if not is_initial_full_desktop_region:
+
+                pending_regions = (
+                    self._get_newer_pending_regions()
                 )
-            ):
+
+                if pending_regions:
+
+                    filtered_entries = []
+
+                    affected_count = 0
+
+                    for entry in entries:
+
+                        entry_bounds = entry.get(
+                            "bounds"
+                        )
+
+                        if not entry_bounds:
+
+                            filtered_entries.append(
+                                entry
+                            )
+
+                            continue
+
+                        if self._entry_overlaps_pending_change(
+                            entry_bounds,
+                            pending_regions,
+                        ):
+
+                            affected_count += 1
+
+                            logger.info(
+                                self.MODULE,
+                                "Excluding completed OCR entry "
+                                "from TranslationMap commit because "
+                                "it overlaps a newer pending "
+                                "desktop change: "
+                                f"bounds={entry_bounds}, "
+                                f"original="
+                                f"{entry.get('original', '')[:120]!r}"
+                            )
+
+                            continue
+
+                        filtered_entries.append(
+                            entry
+                        )
+
+                    committable_entries = (
+                        filtered_entries
+                    )
+
+                    logger.info(
+                        self.MODULE,
+                        "Live result reconciliation: "
+                        f"original_entries={len(entries)}, "
+                        f"affected_entries={affected_count}, "
+                        f"committable_entries="
+                        f"{len(committable_entries)}, "
+                        f"pending_regions={len(pending_regions)}."
+                    )
+
+            # --------------------------------------------------
+            # IMPORTANT: Final validity check BEFORE any
+            # TranslationMap removal.
+            #
+            # A newer pending desktop change can arrive after
+            # the first reconciliation above. If that makes all
+            # completed OCR entries stale, leave the existing
+            # TranslationMap untouched.
+            # --------------------------------------------------
+
+            if not is_initial_full_desktop_region:
+
+                latest_pending_regions = (
+                    self._get_newer_pending_regions()
+                )
+
+                if latest_pending_regions:
+
+                    final_entries = []
+
+                    final_excluded_count = 0
+
+                    for entry in committable_entries:
+
+                        entry_bounds = entry.get(
+                            "bounds"
+                        )
+
+                        if not entry_bounds:
+
+                            final_entries.append(
+                                entry
+                            )
+
+                            continue
+
+                        if self._entry_overlaps_pending_change(
+                            entry_bounds,
+                            latest_pending_regions,
+                        ):
+
+                            final_excluded_count += 1
+
+                            logger.info(
+                                self.MODULE,
+                                "Final pre-removal validation "
+                                "excluded OCR entry because it now "
+                                "overlaps a newer pending desktop "
+                                "change: "
+                                f"bounds={entry_bounds}, "
+                                f"original="
+                                f"{entry.get('original', '')[:120]!r}"
+                            )
+
+                            continue
+
+                        final_entries.append(
+                            entry
+                        )
+
+                    if final_excluded_count:
+
+                        logger.info(
+                            self.MODULE,
+                            "Final pre-removal Live result "
+                            "reconciliation: "
+                            f"excluded={final_excluded_count}, "
+                            f"remaining={len(final_entries)}."
+                        )
+
+                    committable_entries = final_entries
+
+            if not committable_entries:
 
                 logger.info(
                     self.MODULE,
-                    "Skipping TranslationMap commit for "
-                    f"region {dirty_region.bounds}: "
-                    "region changed before commit."
+                    "Skipping TranslationMap commit because "
+                    "all completed OCR entries became affected "
+                    "by newer pending desktop changes. "
+                    "Existing TranslationMap entries were left "
+                    "untouched."
                 )
 
                 continue
@@ -1551,13 +1858,6 @@ class ControllerLive:
             # --------------------------------------------------
             # Initial full-desktop TranslationMap population
             # --------------------------------------------------
-            #
-            # The first Live OCR pass represents the complete
-            # translated desktop.
-            #
-            # Clear any existing entries so the TranslationMap
-            # starts from a clean desktop model.
-            #
 
             if is_initial_full_desktop_region:
 
@@ -1565,31 +1865,162 @@ class ControllerLive:
                     self.MODULE,
                     "Initial full-desktop OCR completed. "
                     "Populating TranslationMap with "
-                    f"{len(entries)} positional entr"
-                    f"{'y' if len(entries) == 1 else 'ies'}."
+                    f"{len(committable_entries)} positional entr"
+                    f"{'y' if len(committable_entries) == 1 else 'ies'}."
                 )
 
                 self.controller.translation_map.clear()
 
             else:
 
+                # --------------------------------------------------
+                # DIAGNOSTIC ONLY
+                # --------------------------------------------------
+                #
+                # Before changing the TranslationMap, inspect the
+                # entries that currently occupy the dirty region.
+                #
+                # This does NOT change application behavior.
+                # It is intended to determine whether the returned
+                # OCR entries overlap existing map entries before
+                # those entries are removed.
+                # --------------------------------------------------
+
+                translation_map = (
+                    self.controller.translation_map
+                )
+
+                existing_entries = (
+                    translation_map.get_entries()
+                )
+
+                existing_in_region = []
+
+                for existing_entry in existing_entries:
+
+                    if self._bounds_intersect(
+                        existing_entry.bounds,
+                        dirty_region.bounds,
+                    ):
+
+                        existing_in_region.append(
+                            existing_entry
+                        )
+
                 logger.info(
                     self.MODULE,
-                    "Updating TranslationMap with "
-                    f"{len(entries)} positional entr"
-                    f"{'y' if len(entries) == 1 else 'ies'} "
-                    f"(generation {generation})."
+                    "TranslationMap diagnostic BEFORE removal: "
+                    f"generation={generation}, "
+                    f"dirty_region={dirty_region.bounds}, "
+                    f"total_map_entries={len(existing_entries)}, "
+                    f"entries_intersecting_dirty_region="
+                    f"{len(existing_in_region)}."
+                )
+
+                for index, existing_entry in enumerate(
+                    existing_in_region,
+                    start=1,
+                ):
+
+                    logger.info(
+                        self.MODULE,
+                        "TranslationMap existing entry "
+                        f"[{index}] before removal: "
+                        f"id={existing_entry.id}, "
+                        f"bounds={existing_entry.bounds}, "
+                        f"state={existing_entry.state.value}, "
+                        f"original={existing_entry.original[:120]!r}, "
+                        f"translation="
+                        f"{existing_entry.translation[:120]!r}"
+                    )
+
+                # --------------------------------------------------
+                # Diagnostic comparison:
+                #
+                # Compare every newly returned OCR entry against
+                # every existing TranslationMap entry BEFORE the
+                # existing entries are removed.
+                #
+                # This tells us whether the incoming OCR result is
+                # spatially overlapping an existing translation.
+                # --------------------------------------------------
+
+                for index, new_entry in enumerate(
+                    committable_entries,
+                    start=1,
+                ):
+
+                    overlapping_existing = []
+
+                    for existing_entry in existing_entries:
+
+                        if self._bounds_intersect(
+                            new_entry["bounds"],
+                            existing_entry.bounds,
+                        ):
+
+                            overlapping_existing.append(
+                                existing_entry
+                            )
+
+                    logger.info(
+                        self.MODULE,
+                        "TranslationMap incoming entry "
+                        f"[{index}] BEFORE removal: "
+                        f"bounds={new_entry['bounds']}, "
+                        f"original={new_entry['original'][:120]!r}, "
+                        f"translation="
+                        f"{new_entry['translation'][:120]!r}, "
+                        f"overlapping_existing="
+                        f"{len(overlapping_existing)}."
+                    )
+
+                    for overlap_index, existing_entry in enumerate(
+                        overlapping_existing,
+                        start=1,
+                    ):
+
+                        logger.info(
+                            self.MODULE,
+                            "TranslationMap overlap detail "
+                            f"incoming[{index}] -> "
+                            f"existing[{overlap_index}]: "
+                            f"id={existing_entry.id}, "
+                            f"existing_bounds="
+                            f"{existing_entry.bounds}, "
+                            f"existing_original="
+                            f"{existing_entry.original[:120]!r}"
+                        )
+
+                # --------------------------------------------------
+                # Existing behavior begins here.
+                # --------------------------------------------------
+
+                logger.info(
+                    self.MODULE,
+                    "TranslationMap diagnostic removal starting: "
+                    f"dirty_region={dirty_region.bounds}, "
+                    f"map_entries_before="
+                    f"{translation_map.entry_count()}."
                 )
 
                 self.controller.translation_map.remove_entries_in_region(
                     dirty_region.bounds
                 )
 
+                logger.info(
+                    self.MODULE,
+                    "TranslationMap diagnostic removal completed: "
+                    f"dirty_region={dirty_region.bounds}, "
+                    f"map_entries_after="
+                    f"{translation_map.entry_count()}."
+                )
+
             # --------------------------------------------------
             # Add positional TranslationMap entries
             # --------------------------------------------------
 
-            for entry in entries:
+            for entry in committable_entries:
 
                 self.controller.translation_map.add_entry(
                     entry["bounds"],
@@ -1600,10 +2031,74 @@ class ControllerLive:
             logger.info(
                 self.MODULE,
                 "TranslationMap updated successfully "
-                f"with {len(entries)} entr"
-                f"{'y' if len(entries) == 1 else 'ies'} "
-                f"for generation {generation}."
+                f"with {len(committable_entries)} entr"
+                f"{'y' if len(committable_entries) == 1 else 'ies'} "
+                f"for generation {generation}. "
+                f"Pipeline_entries={len(entries)}, "
+                f"committable_entries={len(committable_entries)}."
             )
+
+            # --------------------------------------------------
+            # Diagnostic post-commit map state
+            # --------------------------------------------------
+
+            if not is_initial_full_desktop_region:
+
+                logger.info(
+                    self.MODULE,
+                    "TranslationMap diagnostic AFTER insertion: "
+                    f"generation={generation}, "
+                    f"map_entries="
+                    f"{self.controller.translation_map.entry_count()}."
+                )
+
+                #
+                # Check whether duplicate/overlapping entries
+                # now exist in the affected area.
+                #
+                # This is diagnostic only and does not modify
+                # the TranslationMap.
+                #
+
+                affected_entries = []
+
+                for map_entry in (
+                    self.controller.translation_map.get_entries()
+                ):
+
+                    if self._bounds_intersect(
+                        map_entry.bounds,
+                        dirty_region.bounds,
+                    ):
+
+                        affected_entries.append(
+                            map_entry
+                        )
+
+                logger.info(
+                    self.MODULE,
+                    "TranslationMap diagnostic affected-region "
+                    "state: "
+                    f"dirty_region={dirty_region.bounds}, "
+                    f"entries_intersecting_region="
+                    f"{len(affected_entries)}."
+                )
+
+                for index, affected_entry in enumerate(
+                    affected_entries,
+                    start=1,
+                ):
+
+                    logger.info(
+                        self.MODULE,
+                        "TranslationMap affected entry "
+                        f"[{index}] after insertion: "
+                        f"id={affected_entry.id}, "
+                        f"bounds={affected_entry.bounds}, "
+                        f"original={affected_entry.original[:120]!r}, "
+                        f"translation="
+                        f"{affected_entry.translation[:120]!r}"
+                    )
 
             # --------------------------------------------------
             # Debug TranslationMap snapshot

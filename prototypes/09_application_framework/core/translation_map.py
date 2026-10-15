@@ -1,4 +1,6 @@
 """
+translation_map.py
+
 Stores translated text mapped to desktop coordinates.
 
 The Translation Map is the central data structure used by
@@ -13,6 +15,7 @@ Desktop Observation and the Floating Lens.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from itertools import count
 from typing import Callable
 
@@ -22,6 +25,49 @@ from typing import Callable
 # ------------------------------------------------------------
 
 _entry_id = count(1)
+
+
+# ------------------------------------------------------------
+# Translation Entry State
+# ------------------------------------------------------------
+
+class TranslationEntryState(Enum):
+    """
+    Persistent state of a TranslationEntry.
+
+    ACTIVE
+        Entry is currently active on the desktop.
+
+    INACTIVE
+        Entry is retained as known translation knowledge but
+        is not currently active on the desktop.
+
+    Reconciliation outcomes such as NEW, MOVED, RETURNED and
+    CHANGED are intentionally not stored as permanent entry
+    states.
+    """
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+# ------------------------------------------------------------
+# Reconciliation Outcome
+# ------------------------------------------------------------
+
+class ReconciliationOutcome(Enum):
+    """
+    Outcome produced by the future reconciliation process.
+
+    These are transition/results concepts, not persistent
+    TranslationEntry states.
+    """
+
+    KNOWN = "known"
+    MOVED = "moved"
+    RETURNED = "returned"
+    CHANGED = "changed"
+    NEW = "new"
 
 
 # ------------------------------------------------------------
@@ -51,13 +97,11 @@ class MonitorInfo:
     @property
     def width(self) -> int:
         """Return monitor width."""
-
         return self.right - self.left
 
     @property
     def height(self) -> int:
         """Return monitor height."""
-
         return self.bottom - self.top
 
     @property
@@ -68,7 +112,6 @@ class MonitorInfo:
         Format:
             (left, top, width, height)
         """
-
         return (
             self.left,
             self.top,
@@ -85,6 +128,10 @@ class MonitorInfo:
 class TranslationEntry:
     """
     Represents one translated desktop region.
+
+    Entries are retained by TranslationMap even when they
+    become inactive. This allows future reconciliation to
+    reuse previously established translation knowledge.
     """
 
     id: int
@@ -94,6 +141,9 @@ class TranslationEntry:
 
     original: str
     translation: str
+
+    # Persistent knowledge state.
+    state: TranslationEntryState = TranslationEntryState.ACTIVE
 
 
 # ------------------------------------------------------------
@@ -107,12 +157,15 @@ class TranslationMap:
     Responsibilities
     ----------------
     - Store translated desktop regions.
-    - Remove outdated regions.
+    - Retain known translation entries.
+    - Track active/inactive entry state.
+    - Reposition translated regions after desktop moves.
     - Return visible regions.
     - Store virtual desktop metadata.
     - Store physical monitor layout.
     - Track desktop generations.
     - Notify listeners when translation data changes.
+    - Provide atomic reconciliation transactions.
 
     This class does NOT:
     - Capture the desktop.
@@ -120,6 +173,7 @@ class TranslationMap:
     - Perform Translation.
     - Observe desktop changes.
     - Control the Floating Lens.
+    - Implement the reconciliation matching algorithm.
     """
 
     def __init__(self):
@@ -131,16 +185,6 @@ class TranslationMap:
         # Desktop metadata
         #
 
-        # Entire Windows virtual desktop bounds.
-        #
-        # Format:
-        #     (left, top, width, height)
-        #
-        # These coordinates may be negative on systems where
-        # a monitor is positioned left or above the primary
-        # monitor.
-        #
-
         self._desktop_bounds = (
             0,
             0,
@@ -148,13 +192,10 @@ class TranslationMap:
             0,
         )
 
-        # Physical monitor layout.
         self._monitors: list[MonitorInfo] = []
 
-        # Has this desktop model been initialized?
         self._initialized = False
 
-        # Incremented whenever the desktop model changes.
         self._generation = 0
 
         #
@@ -166,16 +207,16 @@ class TranslationMap:
         #
         # Change listeners
         #
-        # Listeners receive no arguments.
-        #
-        # The Floating Lens can register itself here and
-        # refresh only when the TranslationMap actually
-        # changes.
-        #
 
         self._change_listeners: list[
             Callable[[], None]
         ] = []
+
+        #
+        # Reconciliation transaction state
+        #
+
+        self._reconciliation_active = False
 
     # --------------------------------------------------------
     # Change Notifications
@@ -187,12 +228,6 @@ class TranslationMap:
     ):
         """
         Register a listener for TranslationMap changes.
-
-        Parameters
-        ----------
-        listener : callable
-            Function called whenever translation entries
-            are added, removed or cleared.
 
         Duplicate listeners are ignored.
         """
@@ -229,15 +264,213 @@ class TranslationMap:
         """
 
         for listener in self._change_listeners.copy():
-
             try:
-
                 listener()
-
             except Exception:
-                # Listener/UI errors must not break the
-                # TranslationMap itself.
                 continue
+
+    # --------------------------------------------------------
+    # Reconciliation Transactions
+    # --------------------------------------------------------
+
+    def begin_reconciliation(self):
+        """
+        Begin an atomic reconciliation transaction.
+
+        During a reconciliation transaction, individual
+        mutations do not emit change notifications.
+
+        The transaction must be completed with
+        commit_reconciliation().
+        """
+
+        if self._reconciliation_active:
+            raise RuntimeError(
+                "A reconciliation transaction is already active."
+            )
+
+        self._reconciliation_active = True
+
+    def commit_reconciliation(self):
+        """
+        Commit the active reconciliation transaction.
+
+        Exactly one change notification is emitted when the
+        transaction is committed.
+
+        A reconciliation transaction cannot be committed
+        without first calling begin_reconciliation().
+        """
+
+        if not self._reconciliation_active:
+            raise RuntimeError(
+                "No reconciliation transaction is active."
+            )
+
+        self._reconciliation_active = False
+
+        self._notify_change()
+
+    def _require_reconciliation(self):
+        """
+        Ensure a reconciliation-only mutation is being
+        performed inside an active transaction.
+        """
+
+        if not self._reconciliation_active:
+            raise RuntimeError(
+                "This operation requires an active "
+                "reconciliation transaction."
+            )
+
+    # --------------------------------------------------------
+    # Reconciliation Entry Mutations
+    # --------------------------------------------------------
+
+    def mark_entry_active(
+        self,
+        entry_id: int,
+    ):
+        """
+        Mark an existing entry ACTIVE.
+
+        Intended for KNOWN and RETURNED reconciliation
+        outcomes.
+
+        No notification is emitted until
+        commit_reconciliation().
+        """
+
+        self._require_reconciliation()
+
+        entry = self._get_entry_by_id(entry_id)
+
+        if entry is None:
+            raise KeyError(
+                f"Translation entry {entry_id} does not exist."
+            )
+
+        entry.state = TranslationEntryState.ACTIVE
+
+    def mark_entry_inactive(
+        self,
+        entry_id: int,
+    ):
+        """
+        Mark an existing entry INACTIVE.
+
+        This represents the lifecycle transition:
+
+            ACTIVE -> INACTIVE
+
+        No notification is emitted until
+        commit_reconciliation().
+        """
+
+        self._require_reconciliation()
+
+        entry = self._get_entry_by_id(entry_id)
+
+        if entry is None:
+            raise KeyError(
+                f"Translation entry {entry_id} does not exist."
+            )
+
+        entry.state = TranslationEntryState.INACTIVE
+
+    def update_entry_bounds(
+        self,
+        entry_id: int,
+        bounds,
+    ):
+        """
+        Update the desktop bounds of an existing entry.
+
+        Intended for movement/repositioning where the identity,
+        original text and translation remain unchanged.
+
+        No notification is emitted until
+        commit_reconciliation().
+        """
+
+        self._require_reconciliation()
+
+        if len(bounds) != 4:
+            raise ValueError(
+                "Entry bounds must contain "
+                "(left, top, width, height)."
+            )
+
+        entry = self._get_entry_by_id(entry_id)
+
+        if entry is None:
+            raise KeyError(
+                f"Translation entry {entry_id} does not exist."
+            )
+
+        entry.bounds = (
+            int(bounds[0]),
+            int(bounds[1]),
+            int(bounds[2]),
+            int(bounds[3]),
+        )
+
+    def add_new_entry(
+        self,
+        bounds,
+        original,
+        translation,
+    ) -> TranslationEntry:
+        """
+        Add a genuinely new translation entry during
+        reconciliation.
+
+        New entries always begin ACTIVE.
+
+        No notification is emitted until
+        commit_reconciliation().
+        """
+
+        self._require_reconciliation()
+
+        if len(bounds) != 4:
+            raise ValueError(
+                "Entry bounds must contain "
+                "(left, top, width, height)."
+            )
+
+        entry = TranslationEntry(
+            id=next(_entry_id),
+            bounds=(
+                int(bounds[0]),
+                int(bounds[1]),
+                int(bounds[2]),
+                int(bounds[3]),
+            ),
+            original=original,
+            translation=translation,
+            state=TranslationEntryState.ACTIVE,
+        )
+
+        self._entries.append(entry)
+
+        return entry
+
+    def _get_entry_by_id(
+        self,
+        entry_id: int,
+    ) -> TranslationEntry | None:
+        """
+        Return an entry by ID.
+
+        Internal helper used by reconciliation mutations.
+        """
+
+        for entry in self._entries:
+            if entry.id == entry_id:
+                return entry
+
+        return None
 
     # --------------------------------------------------------
     # Desktop Metadata
@@ -250,16 +483,8 @@ class TranslationMap:
         """
         Store the Windows virtual desktop bounds.
 
-        Parameters
-        ----------
-        bounds : tuple
-            Format:
-
-                (left, top, width, height)
-
-        Notes
-        -----
-        The left and top coordinates may be negative.
+        Format:
+            (left, top, width, height)
         """
 
         if len(bounds) != 4:
@@ -300,11 +525,6 @@ class TranslationMap:
     ):
         """
         Store the physical monitor layout.
-
-        Parameters
-        ----------
-        monitors : iterable
-            Iterable of MonitorInfo objects.
 
         A copy is stored so external code cannot modify
         the internal monitor list directly.
@@ -362,9 +582,6 @@ class TranslationMap:
     def next_generation(self):
         """
         Advance to the next desktop generation.
-
-        A future full desktop rebuild increments
-        this value.
         """
 
         self._generation += 1
@@ -385,6 +602,10 @@ class TranslationMap:
     def clear(self):
         """
         Remove every translation entry.
+
+        Clear remains a complete-map reset operation and is
+        intentionally separate from reconciliation lifecycle
+        handling.
         """
 
         if not self._entries:
@@ -392,7 +613,8 @@ class TranslationMap:
 
         self._entries.clear()
 
-        self._notify_change()
+        if not self._reconciliation_active:
+            self._notify_change()
 
     def add_entry(
         self,
@@ -402,18 +624,27 @@ class TranslationMap:
     ):
         """
         Add a translated desktop region.
+
+        This is the existing non-transactional API retained
+        for compatibility with the current application.
+
+        Reconciliation code must use add_new_entry().
         """
 
-        self._entries.append(
-            TranslationEntry(
-                id=next(_entry_id),
-                bounds=bounds,
-                original=original,
-                translation=translation,
-            )
+        entry = TranslationEntry(
+            id=next(_entry_id),
+            bounds=bounds,
+            original=original,
+            translation=translation,
+            state=TranslationEntryState.ACTIVE,
         )
 
-        self._notify_change()
+        self._entries.append(entry)
+
+        if not self._reconciliation_active:
+            self._notify_change()
+
+        return entry
 
     def update_region(
         self,
@@ -422,66 +653,24 @@ class TranslationMap:
         translation,
     ):
         """
-        Atomically replace every translated entry
-        intersecting the supplied desktop region.
+        Replace every translated entry intersecting
+        the supplied desktop region.
 
-        A single logical map update produces exactly
-        one change notification.
+        This is the legacy immediate-update API.
 
-        This prevents observers such as the Floating Lens
-        from refreshing against an intermediate state where
-        the old entries have already been removed but the
-        replacement entry has not yet been added.
+        Reconciliation code should use the explicit transaction
+        methods instead.
         """
 
-        left, top, width, height = bounds
-
-        right = left + width
-        bottom = top + height
-
-        remaining = []
-
-        for entry in self._entries:
-
-            e_left, e_top, e_width, e_height = (
-                entry.bounds
-            )
-
-            e_right = e_left + e_width
-            e_bottom = e_top + e_height
-
-            intersects = not (
-                e_right < left
-                or e_left > right
-                or e_bottom < top
-                or e_top > bottom
-            )
-
-            if not intersects:
-                remaining.append(
-                    entry
-                )
-
-        #
-        # Add the replacement entry before notifying
-        # listeners.
-        #
-        # This makes the complete logical update visible
-        # to every observer at once.
-        #
-
-        remaining.append(
-            TranslationEntry(
-                id=next(_entry_id),
-                bounds=bounds,
-                original=original,
-                translation=translation,
-            )
+        self.remove_entries_in_region(
+            bounds
         )
 
-        self._entries = remaining
-
-        self._notify_change()
+        self.add_entry(
+            bounds,
+            original,
+            translation,
+        )
 
     def remove_entries_in_region(
         self,
@@ -490,6 +679,12 @@ class TranslationMap:
         """
         Remove every translated region intersecting
         the supplied desktop region.
+
+        This remains the legacy physical-removal operation.
+
+        Future ControllerLive reconciliation will no longer
+        use physical deletion for normal visibility changes;
+        it will transition entries to INACTIVE instead.
         """
 
         left, top, width, height = bounds
@@ -518,16 +713,77 @@ class TranslationMap:
             if not intersects:
                 remaining.append(entry)
 
-        #
-        # Only notify when the map actually changed.
-        #
-
         if len(remaining) == len(self._entries):
             return
 
         self._entries = remaining
 
-        self._notify_change()
+        if not self._reconciliation_active:
+            self._notify_change()
+
+    def move_entries_in_region(
+        self,
+        bounds,
+        dx,
+        dy,
+    ):
+        """
+        Reposition translated regions contained within the
+        supplied source region.
+
+        Native movement is intentionally preserved as a
+        separate operation from reconciliation.
+
+        ControllerLive ordering contract:
+
+            Native Move Processing
+                    ↓
+            TranslationMap movement
+                    ↓
+            Dirty-region OCR
+                    ↓
+            Reconciliation
+        """
+
+        left, top, width, height = bounds
+
+        right = left + width
+        bottom = top + height
+
+        moved = 0
+
+        for entry in self._entries:
+
+            e_left, e_top, e_width, e_height = (
+                entry.bounds
+            )
+
+            e_right = e_left + e_width
+            e_bottom = e_top + e_height
+
+            fully_contained = (
+                e_left >= left
+                and e_top >= top
+                and e_right <= right
+                and e_bottom <= bottom
+            )
+
+            if not fully_contained:
+                continue
+
+            entry.bounds = (
+                e_left + int(dx),
+                e_top + int(dy),
+                e_width,
+                e_height,
+            )
+
+            moved += 1
+
+        if moved and not self._reconciliation_active:
+            self._notify_change()
+
+        return moved
 
     # --------------------------------------------------------
     # Queries
@@ -536,6 +792,9 @@ class TranslationMap:
     def get_entries(self):
         """
         Return every translated desktop region.
+
+        Both ACTIVE and INACTIVE entries are returned because
+        both represent known translation knowledge.
         """
 
         return self._entries.copy()
@@ -545,8 +804,11 @@ class TranslationMap:
         bounds,
     ):
         """
-        Return every translated desktop region
+        Return every ACTIVE translated desktop region
         intersecting the supplied viewport.
+
+        INACTIVE entries remain stored in the map but are not
+        considered part of the currently visible desktop.
         """
 
         left, top, width, height = bounds
@@ -557,6 +819,9 @@ class TranslationMap:
         visible = []
 
         for entry in self._entries:
+
+            if entry.state != TranslationEntryState.ACTIVE:
+                continue
 
             e_left, e_top, e_width, e_height = (
                 entry.bounds
@@ -579,7 +844,9 @@ class TranslationMap:
 
     def entry_count(self):
         """
-        Return the number of translated regions.
+        Return the total number of known translation regions.
+
+        This includes both ACTIVE and INACTIVE entries.
         """
 
         return len(self._entries)

@@ -30,8 +30,8 @@ This class does NOT:
 - Perform debounce or settling logic.
 
 The filter performs pixel-difference tightening,
-connected-component style clustering, basic text-like change
-filtering, and single-cluster size protection only.
+connected-component style clustering, basic text-like
+change filtering, and single-cluster size protection only.
 """
 
 from __future__ import annotations
@@ -162,6 +162,16 @@ class ChangeFilter:
     MIN_TEXT_WIDTH = 8
 
     # --------------------------------------------------
+    # Scroll-change detection
+    # --------------------------------------------------
+
+    SCROLL_MIN_REGION_WIDTH = 300
+    SCROLL_MIN_REGION_HEIGHT = 150
+    SCROLL_MIN_REGION_AREA_RATIO = 0.12
+    SCROLL_MIN_CHANGED_PIXEL_RATIO = 0.08
+    SCROLL_MAX_ASPECT_RATIO = 12.0
+
+    # --------------------------------------------------
     # Text-change grouping configuration
     # --------------------------------------------------
 
@@ -186,6 +196,15 @@ class ChangeFilter:
         """
 
         self._previous_image = None
+
+        #
+        # Deferred scroll state. A scroll-like frame is not sent
+        # to OCR immediately. Instead, the union of the scroll
+        # dirty regions is retained until the scroll activity stops.
+        #
+        self._scroll_active = False
+        self._scroll_region = None
+        self._scroll_detected_this_filter_call = False
 
     # --------------------------------------------------
     # BASELINE
@@ -213,12 +232,16 @@ class ChangeFilter:
             desktop_image.copy()
         )
 
+        self._clear_scroll_state()
+
     def reset(self):
         """
         Clear the stored comparison baseline.
         """
 
         self._previous_image = None
+
+        self._clear_scroll_state()
 
     def has_baseline(self) -> bool:
         """
@@ -251,6 +274,26 @@ class ChangeFilter:
 
         The current complete desktop image always becomes the
         new comparison baseline.
+
+        Scroll-like viewport changes are handled differently
+        from ordinary text changes:
+
+            scrolling starts
+                ↓
+            accumulate scroll dirty regions
+                ↓
+            suppress transient OCR work
+                ↓
+            scrolling stops
+                ↓
+            release accumulated region
+                ↓
+            ControllerLive 3-second stability gate
+                ↓
+            OCR / Translation
+
+        This prevents every intermediate scroll frame from
+        continuously restarting Live OCR work.
         """
 
         if desktop_image is None:
@@ -295,15 +338,33 @@ class ChangeFilter:
         #
         # No dirty regions means there is nothing to analyze.
         #
-        # Still update the baseline because this image is
-        # the newest complete desktop state.
+        # If a deferred scroll is active, however, the absence
+        # of a new dirty region is a useful indication that the
+        # transient scroll activity has stopped.
         #
 
         if not dirty_regions:
 
+            deferred_scroll_region = (
+                self._finalize_deferred_scroll()
+            )
+
             self._previous_image = (
                 desktop_image.copy()
             )
+
+            if deferred_scroll_region is not None:
+
+                print(
+                    "[ChangeFilter] "
+                    "Scroll activity stopped; releasing "
+                    "deferred scroll region for stable OCR: "
+                    f"{deferred_scroll_region.bounds}"
+                )
+
+                return [
+                    deferred_scroll_region
+                ]
 
             return []
 
@@ -333,9 +394,20 @@ class ChangeFilter:
                 desktop_image.copy()
             )
 
+            self._clear_scroll_state()
+
             return []
 
         filtered_regions = []
+
+        #
+        # This flag is reset for every complete desktop
+        # acquisition.
+        #
+        # If at least one dirty region is identified as
+        # scroll-like, the deferred scroll remains active.
+        #
+        self._scroll_detected_this_filter_call = False
 
         for dirty_region in dirty_regions:
 
@@ -353,6 +425,39 @@ class ChangeFilter:
 
                 filtered_regions.extend(
                     regions
+                )
+
+        #
+        # If we were already tracking a scroll and this frame did
+        # not contain another scroll-like change, the scroll has
+        # stopped.
+        #
+        # Release the accumulated region now. It will then pass
+        # through ControllerLive's existing 3-second stability
+        # gate before OCR/translation starts.
+        #
+
+        if (
+            self._scroll_active
+            and not self._scroll_detected_this_filter_call
+        ):
+
+            deferred_scroll_region = (
+                self._finalize_deferred_scroll()
+            )
+
+            if deferred_scroll_region is not None:
+
+                print(
+                    "[ChangeFilter] "
+                    "Scroll activity stopped; releasing "
+                    "deferred scroll region for stable OCR: "
+                    f"{deferred_scroll_region.bounds}"
+                )
+
+                filtered_regions.insert(
+                    0,
+                    deferred_scroll_region,
                 )
 
         #
@@ -624,6 +729,44 @@ class ChangeFilter:
                 "No raw pixel-change clusters found."
             )
 
+            return []
+
+        #
+        # Scroll/reflow changes are fundamentally different from
+        # ordinary text edits.
+        #
+        # Detect them before the text-shape gate.
+        #
+
+        scroll_region = self._detect_scroll_like_change(
+            dirty_region=dirty_region,
+            clusters=clusters,
+            changed_mask=changed_mask,
+            desktop_width=desktop_width,
+            desktop_height=desktop_height,
+        )
+
+        if scroll_region is not None:
+
+            self._begin_or_extend_deferred_scroll(
+                scroll_region=scroll_region,
+            )
+
+            self._scroll_detected_this_filter_call = True
+
+            print(
+                "[ChangeFilter] "
+                "SCROLL-LIKE CHANGE detected; "
+                "deferring viewport change until scrolling stops."
+            )
+
+            #
+            # Do not send the transient scroll frame to OCR.
+            #
+            # The accumulated dirty region is retained until
+            # a later desktop acquisition no longer looks like
+            # another scroll frame.
+            #
             return []
 
         #
@@ -914,6 +1057,242 @@ class ChangeFilter:
         return result_regions
 
     # --------------------------------------------------
+    # DEFERRED SCROLL STATE
+    # --------------------------------------------------
+
+    def _clear_scroll_state(self):
+        """
+        Clear any deferred scroll-tracking state.
+        """
+
+        self._scroll_active = False
+        self._scroll_region = None
+        self._scroll_detected_this_filter_call = False
+
+    def _begin_or_extend_deferred_scroll(
+        self,
+        scroll_region,
+    ):
+        """
+        Start or extend a deferred scroll operation.
+
+        Subsequent scroll-like frames extend only the accumulated
+        dirty bounds. ``_previous_image`` continues advancing
+        frame-by-frame so normal change detection remains intact.
+        """
+
+        if not self._scroll_active:
+
+            self._scroll_active = True
+
+            self._scroll_region = (
+                scroll_region.left,
+                scroll_region.top,
+                scroll_region.right,
+                scroll_region.bottom,
+            )
+
+            print(
+                "[ChangeFilter] "
+                "Started deferred scroll tracking: "
+                f"region={scroll_region.bounds}"
+            )
+
+            return
+
+        if self._scroll_region is None:
+
+            self._scroll_region = (
+                scroll_region.left,
+                scroll_region.top,
+                scroll_region.right,
+                scroll_region.bottom,
+            )
+
+            return
+
+        left, top, right, bottom = (
+            self._scroll_region
+        )
+
+        self._scroll_region = (
+            min(
+                left,
+                scroll_region.left,
+            ),
+            min(
+                top,
+                scroll_region.top,
+            ),
+            max(
+                right,
+                scroll_region.right,
+            ),
+            max(
+                bottom,
+                scroll_region.bottom,
+            ),
+        )
+
+    def _finalize_deferred_scroll(self):
+        """
+        Return the accumulated scroll region and clear deferred
+        state.
+
+        OCR is intentionally NOT performed here. The returned
+        region is handed to ControllerLive, which still applies
+        its existing 3-second stability requirement before
+        starting OCR/translation.
+        """
+
+        if not self._scroll_active:
+
+            return None
+
+        if self._scroll_region is None:
+
+            self._clear_scroll_state()
+
+            return None
+
+        left, top, right, bottom = (
+            self._scroll_region
+        )
+
+        region = DesktopChangeRegion(
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
+        )
+
+        self._clear_scroll_state()
+
+        return region
+
+    # --------------------------------------------------
+    # SCROLL CHANGE DETECTION
+    # --------------------------------------------------
+
+    def _detect_scroll_like_change(
+        self,
+        dirty_region,
+        clusters,
+        changed_mask,
+        desktop_width,
+        desktop_height,
+    ):
+        """
+        Return the dirty region when it strongly resembles
+        a viewport change.
+        """
+
+        left = dirty_region.left
+        top = dirty_region.top
+        right = dirty_region.right
+        bottom = dirty_region.bottom
+
+        width = right - left
+        height = bottom - top
+
+        if width <= 0 or height <= 0:
+
+            return None
+
+        region_area = (
+            width
+            * height
+        )
+
+        desktop_area = (
+            desktop_width
+            * desktop_height
+        )
+
+        if desktop_area <= 0:
+
+            return None
+
+        if (
+            width
+            < self.SCROLL_MIN_REGION_WIDTH
+            or height
+            < self.SCROLL_MIN_REGION_HEIGHT
+        ):
+
+            return None
+
+        region_area_ratio = (
+            region_area
+            / desktop_area
+        )
+
+        if (
+            region_area_ratio
+            < self.SCROLL_MIN_REGION_AREA_RATIO
+        ):
+
+            return None
+
+        changed_pixels = sum(
+            1
+            for value
+            in changed_mask.tobytes()
+            if value
+        )
+
+        changed_pixel_ratio = (
+            changed_pixels
+            / region_area
+        )
+
+        if (
+            changed_pixel_ratio
+            < self.SCROLL_MIN_CHANGED_PIXEL_RATIO
+        ):
+
+            return None
+
+        shortest_dimension = min(
+            width,
+            height,
+        )
+
+        longest_dimension = max(
+            width,
+            height,
+        )
+
+        aspect_ratio = (
+            longest_dimension
+            / shortest_dimension
+        )
+
+        if (
+            aspect_ratio
+            > self.SCROLL_MAX_ASPECT_RATIO
+        ):
+
+            return None
+
+        print(
+            "[ChangeFilter] "
+            f"Scroll candidate metrics: "
+            f"region={width}x{height} "
+            f"area_ratio={region_area_ratio:.3f} "
+            f"changed_ratio={changed_pixel_ratio:.3f} "
+            f"clusters={len(clusters)} "
+            f"aspect_ratio={aspect_ratio:.2f}"
+        )
+
+        return DesktopChangeRegion(
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
+        )
+
+    # --------------------------------------------------
     # TEXT CHANGE GROUPING
     # --------------------------------------------------
 
@@ -941,10 +1320,11 @@ class ChangeFilter:
         Returns
         -------
         list[dict]
-            Spatially grouped change clusters.
+            Grouped spatial change clusters.
         """
 
         if not clusters:
+
             return []
 
         grouped = []
@@ -973,12 +1353,15 @@ class ChangeFilter:
             # normally spatially close.
             #
 
-            for group in reversed(grouped):
+            for group in reversed(
+                grouped
+            ):
 
                 if not self._text_clusters_are_compatible(
                     group,
                     cluster,
                 ):
+
                     continue
 
                 self._merge_cluster_into_group(
@@ -1042,6 +1425,7 @@ class ChangeFilter:
                         existing,
                         group,
                     ):
+
                         continue
 
                     self._merge_cluster_into_group(
@@ -1051,9 +1435,11 @@ class ChangeFilter:
 
                     merged = True
                     changed = True
+
                     break
 
                 if not merged:
+
                     merged_groups.append(
                         group
                     )
@@ -1104,10 +1490,18 @@ class ChangeFilter:
             - second["top"]
         )
 
-        if first_width <= 0 or first_height <= 0:
+        if (
+            first_width <= 0
+            or first_height <= 0
+        ):
+
             return False
 
-        if second_width <= 0 or second_height <= 0:
+        if (
+            second_width <= 0
+            or second_height <= 0
+        ):
+
             return False
 
         #
@@ -1148,7 +1542,7 @@ class ChangeFilter:
         #
         # Vertical gap between the two bounding boxes.
         #
-        # Negative values mean vertical overlap.
+        # Negative values mean the boxes overlap vertically.
         #
 
         if first["bottom"] < second["top"]:
@@ -1187,6 +1581,7 @@ class ChangeFilter:
             horizontal_gap
             > max_horizontal_gap
         ):
+
             return False
 
         #
@@ -1207,6 +1602,7 @@ class ChangeFilter:
             vertical_gap
             > max_vertical_gap
         ):
+
             return False
 
         #
@@ -1241,6 +1637,7 @@ class ChangeFilter:
             center_delta
             > max_center_delta
         ):
+
             return False
 
         return True
@@ -1401,6 +1798,7 @@ class ChangeFilter:
             metrics["fill_ratio"]
             > self.MAX_TEXT_FILL_RATIO
         ):
+
             return False
 
         max_aspect_ratio = (
@@ -1413,12 +1811,14 @@ class ChangeFilter:
             metrics["aspect_ratio"]
             > max_aspect_ratio
         ):
+
             return False
 
         if (
             metrics["width"]
             < self.MIN_TEXT_WIDTH
         ):
+
             return False
 
         return True
@@ -1473,6 +1873,7 @@ class ChangeFilter:
         )
 
         if width <= 0 or height <= 0:
+
             return []
 
         mask_bytes = (
@@ -1525,9 +1926,11 @@ class ChangeFilter:
                         row_start + x
                     ] == 0
                 ):
+
                     x += 1
 
                 if x >= width:
+
                     break
 
                 run_left = x
@@ -1538,6 +1941,7 @@ class ChangeFilter:
                         row_start + x
                     ] != 0
                 ):
+
                     x += 1
 
                 run_right = x
@@ -1603,6 +2007,7 @@ class ChangeFilter:
                         or expanded_left
                         >= previous_expanded_right
                     ):
+
                         continue
 
                     root = (
@@ -1613,6 +2018,7 @@ class ChangeFilter:
                     )
 
                     if root not in matching_roots:
+
                         matching_roots.append(
                             root
                         )
@@ -1784,9 +2190,12 @@ class ChangeFilter:
             )
 
             if root in seen_roots:
+
                 continue
 
-            seen_roots.add(root)
+            seen_roots.add(
+                root
+            )
 
             root_component = (
                 components[root]
@@ -1892,6 +2301,7 @@ class ChangeFilter:
         )
 
         if first_root == second_root:
+
             return first_root
 
         first = (
@@ -1962,12 +2372,14 @@ class ChangeFilter:
         width, height = image.size
 
         if width <= 0:
+
             raise ValueError(
                 "Desktop image width must be "
                 "greater than zero."
             )
 
         if height <= 0:
+
             raise ValueError(
                 "Desktop image height must be "
                 "greater than zero."

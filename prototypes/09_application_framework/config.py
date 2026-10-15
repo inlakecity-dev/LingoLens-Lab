@@ -41,6 +41,7 @@ TESSERACT_PATH = (
 # OCR Configuration
 # ==========================================================
 
+# Languages currently supported by the LingoLens OCR engine.
 OCR_LANGUAGE_MAP = {
     "English": "eng",
     "Hindi": "hin",
@@ -48,6 +49,10 @@ OCR_LANGUAGE_MAP = {
     "Chinese": "chi_sim",
 }
 
+# Default OCR language set.
+#
+# This is intentionally kept unchanged for this step.
+# OCR behavior will be tuned separately after testing.
 DEFAULT_OCR_LANGUAGES = [
     "English",
     "Hindi",
